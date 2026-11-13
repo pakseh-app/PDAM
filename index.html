@@ -396,6 +396,8 @@
      * MODULE 1: UTILITIES, FORMATTERS & CRYPTOGRAPHY
      * =========================================================================
      */
+    const DEFAULT_GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxWPi0zeuXmb8ITUW3Xgb1k_i-hlwQI2tOxsCbIViibn7YlbLiXTR0G2_fT-QmNIbP6EA/exec';
+
     const Utils = {
       formatRupiah(num) {
         const n = Number(num) || 0;
@@ -539,7 +541,7 @@
     };
 
     const AppState = {
-      apiUrl: localStorage.getItem('pam_kalikurmo_api_url') || 'https://script.google.com/macros/s/AKfycbxWPi0zeuXmb8ITUW3Xgb1k_i-hlwQI2tOxsCbIViibn7YlbLiXTR0G2_fT-QmNIbP6EA/exec',
+      apiUrl: localStorage.getItem('pam_kalikurmo_api_url') || DEFAULT_GAS_API_URL,
       user: {
         id_user: 'USR-ADMIN',
         username: 'pengelola',
