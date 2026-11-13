@@ -49,11 +49,76 @@
   <!-- html2canvas untuk Export Struk Pembayaran ke Gambar PNG -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
+  <!-- Firebase Cloud Firestore SDK (Real-Time Multi-Device Database: pdam-94a2f) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import {
+      getFirestore,
+      doc,
+      setDoc,
+      getDoc,
+      deleteDoc,
+      collection,
+      onSnapshot
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC4vDSPUFAjSHeRiF8x5xHzQnL0PTVxBFw",
+      authDomain: "pdam-94a2f.firebaseapp.com",
+      projectId: "pdam-94a2f",
+      storageBucket: "pdam-94a2f.firebasestorage.app",
+      messagingSenderId: "1043629121378",
+      appId: "1:1043629121378:web:5296c78140b6aee8b1163b",
+      measurementId: "G-WQ0CF5MSVY"
+    };
+
+    const firebaseApp = initializeApp(firebaseConfig);
+    const firestoreDb = getFirestore(firebaseApp);
+
+    window.FirebaseBridge = {
+      projectId: firebaseConfig.projectId,
+      db: firestoreDb,
+      doc,
+      setDoc,
+      getDoc,
+      deleteDoc,
+      collection,
+      onSnapshot
+    };
+
+    window.dispatchEvent(new Event('firebase-bridge-ready'));
+  </script>
+
   <style>
+    /* Hilangkan 300ms tap delay di perangkat layar sentuh / HP */
+    button, input, select, textarea, a, label {
+      touch-action: manipulation;
+    }
+
+    button:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #f1f5f9; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .page-enter {
+      animation: fadeSlideIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes modalPop {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .modal-enter {
+      animation: modalPop 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    }
 
     @keyframes pulseSoft {
       0%, 100% { opacity: 1; }
@@ -66,7 +131,7 @@
       20%, 60% { transform: translateX(-8px); }
       40%, 80% { transform: translateX(8px); }
     }
-    .animate-shake { animation: shake 0.35s ease-in-out; }
+    .animate-shake { animation: shake 0.3s ease-in-out; }
 
     /* Watermark Transparan KALIKURMO pada Struk Pembayaran */
     .receipt-watermark-container {
@@ -131,8 +196,8 @@
   <!-- =====================================================================
        1. APPLICATION LOCK OVERLAY (6-DIGIT PIN KEYPAD)
        ===================================================================== -->
-  <div id="pin-lock-modal" class="hidden fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-    <div id="pin-lock-card" class="w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+  <div id="pin-lock-modal" class="hidden fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div id="pin-lock-card" class="modal-enter w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
       <!-- Header -->
       <div class="bg-gradient-to-r from-blue-800 to-blue-600 p-5 text-white text-center relative">
         <button type="button" onclick="closePinModalToReadOnly()" title="Tetap dalam Mode Terkunci (Lihat Saja)"
@@ -150,12 +215,12 @@
       <!-- 6 PIN Dots & Feedback -->
       <div class="p-5">
         <div class="flex justify-center gap-3 my-3" id="pin-dots-container">
-          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all"></span>
-          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all"></span>
-          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all"></span>
-          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all"></span>
-          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all"></span>
-          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all"></span>
+          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all duration-100"></span>
+          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all duration-100"></span>
+          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all duration-100"></span>
+          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all duration-100"></span>
+          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all duration-100"></span>
+          <span class="pin-dot w-4 h-4 rounded-full border-2 border-blue-600 bg-transparent transition-all duration-100"></span>
         </div>
 
         <div id="pin-error-banner" class="hidden text-center text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl py-2 px-3 mb-3">
@@ -164,18 +229,18 @@
 
         <!-- Keypad 0-9 -->
         <div class="grid grid-cols-3 gap-2.5 mt-3 select-none">
-          <button type="button" onclick="pressPinDigit('1')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition shadow-sm">1</button>
-          <button type="button" onclick="pressPinDigit('2')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition shadow-sm">2</button>
-          <button type="button" onclick="pressPinDigit('3')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition shadow-sm">3</button>
-          <button type="button" onclick="pressPinDigit('4')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition shadow-sm">4</button>
-          <button type="button" onclick="pressPinDigit('5')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition shadow-sm">5</button>
-          <button type="button" onclick="pressPinDigit('6')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition shadow-sm">6</button>
-          <button type="button" onclick="pressPinDigit('7')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition shadow-sm">7</button>
-          <button type="button" onclick="pressPinDigit('8')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition shadow-sm">8</button>
-          <button type="button" onclick="pressPinDigit('9')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition shadow-sm">9</button>
-          <button type="button" onclick="resetPinInput()" class="py-3.5 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-xs uppercase tracking-wider transition">Reset</button>
-          <button type="button" onclick="pressPinDigit('0')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition shadow-sm">0</button>
-          <button type="button" onclick="backspacePinDigit()" class="py-3.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1 transition">
+          <button type="button" onclick="pressPinDigit('1')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition-colors duration-100 shadow-sm">1</button>
+          <button type="button" onclick="pressPinDigit('2')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition-colors duration-100 shadow-sm">2</button>
+          <button type="button" onclick="pressPinDigit('3')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition-colors duration-100 shadow-sm">3</button>
+          <button type="button" onclick="pressPinDigit('4')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition-colors duration-100 shadow-sm">4</button>
+          <button type="button" onclick="pressPinDigit('5')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition-colors duration-100 shadow-sm">5</button>
+          <button type="button" onclick="pressPinDigit('6')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition-colors duration-100 shadow-sm">6</button>
+          <button type="button" onclick="pressPinDigit('7')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition-colors duration-100 shadow-sm">7</button>
+          <button type="button" onclick="pressPinDigit('8')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition-colors duration-100 shadow-sm">8</button>
+          <button type="button" onclick="pressPinDigit('9')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition-colors duration-100 shadow-sm">9</button>
+          <button type="button" onclick="resetPinInput()" class="py-3.5 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-xs uppercase tracking-wider transition-colors duration-100">Reset</button>
+          <button type="button" onclick="pressPinDigit('0')" class="pin-key py-3.5 rounded-2xl bg-slate-100 hover:bg-blue-50 active:bg-blue-600 active:text-white text-slate-800 font-bold text-xl transition-colors duration-100 shadow-sm">0</button>
+          <button type="button" onclick="backspacePinDigit()" class="py-3.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1 transition-colors duration-100">
             <i data-lucide="delete" class="w-4 h-4"></i> Hapus
           </button>
         </div>
@@ -183,7 +248,7 @@
         <button type="button" id="btn-submit-pin" onclick="submitPinUnlock()"
           class="w-full mt-4 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2">
           <i data-lucide="unlock" class="w-4 h-4"></i>
-          <span>Buka Kunci</span>
+          <span id="btn-submit-pin-text">Buka Kunci</span>
         </button>
 
         <button type="button" onclick="closePinModalToReadOnly()"
@@ -200,10 +265,10 @@
   <div id="app-shell" class="min-h-screen flex flex-col lg:flex-row">
 
     <!-- Mobile Sidebar Backdrop -->
-    <div id="sidebar-backdrop" onclick="toggleMobileSidebar(false)" class="hidden fixed inset-0 bg-slate-900/50 z-30 lg:hidden"></div>
+    <div id="sidebar-backdrop" onclick="toggleMobileSidebar(false)" class="hidden fixed inset-0 bg-slate-900/50 z-30 lg:hidden transition-opacity duration-150"></div>
 
     <!-- Left Sidebar -->
-    <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-40 w-72 bg-slate-900 text-slate-200 flex flex-col transform -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-in-out shrink-0">
+    <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-40 w-72 bg-slate-900 text-slate-200 flex flex-col transform -translate-x-full lg:translate-x-0 transition-transform duration-150 ease-out shrink-0 will-change-transform">
       <!-- Brand -->
       <div class="p-5 border-b border-slate-800 flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -239,34 +304,34 @@
 
       <!-- Navigation Menu -->
       <nav id="sidebar-nav" class="flex-1 overflow-y-auto px-3 py-4 space-y-1 text-sm">
-        <button data-nav="dashboard" onclick="navigateTo('dashboard')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="dashboard" onclick="navigateTo('dashboard')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
           <span>Dashboard Utama</span>
         </button>
 
         <div class="pt-3 pb-1 px-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Operasional Air</div>
 
-        <button data-nav="pelanggan" onclick="navigateTo('pelanggan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="pelanggan" onclick="navigateTo('pelanggan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="users" class="w-4 h-4"></i>
           <span>Data Pelanggan</span>
         </button>
 
-        <button data-nav="meter" onclick="navigateTo('meter')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="meter" onclick="navigateTo('meter')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="gauge" class="w-4 h-4"></i>
           <span>Pencatatan Meter Air</span>
         </button>
 
-        <button data-nav="tagihan" onclick="navigateTo('tagihan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="tagihan" onclick="navigateTo('tagihan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="file-text" class="w-4 h-4"></i>
           <span>Tarif &amp; Tagihan Bulanan</span>
         </button>
 
-        <button data-nav="pembayaran" onclick="navigateTo('pembayaran')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="pembayaran" onclick="navigateTo('pembayaran')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="banknote" class="w-4 h-4"></i>
           <span>Pencatatan Pembayaran</span>
         </button>
 
-        <button data-nav="tunggakan" onclick="navigateTo('tunggakan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="tunggakan" onclick="navigateTo('tunggakan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="alert-triangle" class="w-4 h-4"></i>
           <span>Manajemen Tunggakan</span>
           <span id="badge-tunggakan-count" class="ml-auto text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300">0</span>
@@ -274,34 +339,34 @@
 
         <div class="pt-3 pb-1 px-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Keuangan &amp; Laporan</div>
 
-        <button data-nav="keuangan" onclick="navigateTo('keuangan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="keuangan" onclick="navigateTo('keuangan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="wallet" class="w-4 h-4"></i>
           <span>Pembukuan Keuangan</span>
         </button>
 
-        <button data-nav="laporan" onclick="navigateTo('laporan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="laporan" onclick="navigateTo('laporan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
           <span>Laporan Keuangan</span>
         </button>
 
         <div class="pt-3 pb-1 px-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Administrasi &amp; Pengaturan</div>
 
-        <button data-nav="dusun" onclick="navigateTo('dusun')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="dusun" onclick="navigateTo('dusun')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="map-pin" class="w-4 h-4"></i>
           <span>Manajemen Dusun</span>
         </button>
 
-        <button data-nav="pengguna" onclick="navigateTo('pengguna')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="pengguna" onclick="navigateTo('pengguna')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="user-cog" class="w-4 h-4"></i>
           <span>Manajemen Pengguna</span>
         </button>
 
-        <button data-nav="keamanan" onclick="navigateTo('keamanan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="keamanan" onclick="navigateTo('keamanan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="shield-check" class="w-4 h-4"></i>
           <span>Keamanan Aplikasi (PIN)</span>
         </button>
 
-        <button data-nav="pengaturan" onclick="navigateTo('pengaturan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition">
+        <button data-nav="pengaturan" onclick="navigateTo('pengaturan')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100">
           <i data-lucide="settings" class="w-4 h-4"></i>
           <span>Pengaturan Aplikasi</span>
         </button>
@@ -312,7 +377,7 @@
         <button type="button" onclick="openApiConfigModal()"
           class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 font-semibold text-xs flex items-center justify-center gap-2 transition">
           <i data-lucide="cloud" class="w-4 h-4"></i>
-          <span id="sidebar-cloud-status">Atur Cloud Google Sheets</span>
+          <span id="sidebar-cloud-status">Firebase Cloud: pdam-94a2f</span>
         </button>
         <button type="button" onclick="handleHeaderLockClick()"
           class="w-full py-2.5 px-4 rounded-xl bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white font-semibold text-xs flex items-center justify-center gap-2 transition">
@@ -369,14 +434,14 @@
       <!-- Footer -->
       <footer class="border-t border-slate-200 bg-white px-4 lg:px-8 py-3 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-2">
         <span>&copy; <span id="footer-year">2026</span> <strong class="text-slate-700">PAM DESA KALIKURMO</strong> — Sistem Administrasi &amp; Keuangan Air Bersih</span>
-        <span id="footer-cloud-info" class="font-mono text-[11px]">Sinkronisasi Otomatis: 8 detik</span>
+        <span id="footer-cloud-info" class="font-mono text-[11px]">Database Cloud: Firebase Firestore (Real-Time)</span>
       </footer>
     </div>
   </div>
 
   <!-- Generic Reusable Modal -->
   <div id="app-modal" class="hidden fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-    <div id="app-modal-box" class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden my-8">
+    <div id="app-modal-box" class="modal-enter bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden my-8">
       <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
         <h3 id="app-modal-title" class="font-extrabold text-slate-800 text-base">Modal Title</h3>
         <button type="button" onclick="closeAppModal()" class="w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-500">
@@ -388,7 +453,7 @@
   </div>
 
   <!-- =====================================================================
-       4. COMPLETE APPLICATION JAVASCRIPT ARCHITECTURE
+       4. COMPLETE APPLICATION JAVASCRIPT ARCHITECTURE (OPTIMIZED & SMOOTH)
        ===================================================================== -->
   <script>
     /**
@@ -396,7 +461,9 @@
      * MODULE 1: UTILITIES, FORMATTERS & CRYPTOGRAPHY
      * =========================================================================
      */
-    const DEFAULT_GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxWPi0zeuXmb8ITUW3Xgb1k_i-hlwQI2tOxsCbIViibn7YlbLiXTR0G2_fT-QmNIbP6EA/exec';
+    const FIREBASE_PROJECT_ID = 'pdam-94a2f';
+    const DB_CACHE_KEY = 'pam_kalikurmo_db_cache_v3';
+    const INPUT_HISTORY_KEY = 'pam_kalikurmo_input_history_v1';
 
     const Utils = {
       formatRupiah(num) {
@@ -434,8 +501,9 @@
       },
 
       formatPeriode(ym) {
-        if (!ym || !ym.includes('-')) return ym || '-';
-        const [y, m] = ym.split('-');
+        const strYm = String(ym || '');
+        if (!strYm || !strYm.includes('-')) return strYm || '-';
+        const [y, m] = strYm.split('-');
         const bulan = [
           'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
           'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
@@ -487,9 +555,106 @@
           title,
           text,
           showConfirmButton: false,
-          timer: 3200,
+          timer: 2600,
           timerProgressBar: true
         });
+      }
+    };
+
+    function refreshIcons(rootEl = document.body) {
+      if (typeof lucide !== 'undefined' && lucide.createIcons) {
+        lucide.createIcons({ root: rootEl });
+      }
+    }
+
+    /**
+     * =========================================================================
+     * RIWAYAT PENGISIAN NAMA DUSUN, RT, DAN RW (TINGGAL KLIK SAAT INPUT)
+     * =========================================================================
+     */
+    const InputHistory = {
+      load() {
+        try {
+          const raw = localStorage.getItem(INPUT_HISTORY_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            return {
+              dusun: Array.isArray(parsed.dusun) ? parsed.dusun : [],
+              rt: Array.isArray(parsed.rt) ? parsed.rt : [],
+              rw: Array.isArray(parsed.rw) ? parsed.rw : []
+            };
+          }
+        } catch (e) { /* ignore */ }
+        return { dusun: [], rt: [], rw: [] };
+      },
+
+      record(dusunName, rtVal, rwVal) {
+        const hist = this.load();
+        const addUnique = (arr, val) => {
+          const clean = String(val ?? '').trim();
+          if (!clean) return arr;
+          const filtered = arr.filter(x => x.toLowerCase() !== clean.toLowerCase());
+          return [clean, ...filtered].slice(0, 30);
+        };
+        hist.dusun = addUnique(hist.dusun, dusunName);
+        hist.rt = addUnique(hist.rt, rtVal);
+        hist.rw = addUnique(hist.rw, rwVal);
+        try {
+          localStorage.setItem(INPUT_HISTORY_KEY, JSON.stringify(hist));
+        } catch (e) { /* ignore */ }
+      },
+
+      getOptions() {
+        const hist = this.load();
+        const usedDusunIds = new Set(AppState.db.pelanggan.map(p => p.id_dusun).filter(Boolean));
+        const defaultPlaceholderPattern = /^Dusun [1-7]$/i;
+
+        // Ambil nama dusun dari riwayat lokal, pelanggan yang sudah tersimpan, dan dusun kustom
+        const dusunSet = new Map();
+        const pushDusun = (name) => {
+          const clean = String(name ?? '').trim();
+          if (!clean) return;
+          if (!dusunSet.has(clean.toLowerCase())) {
+            dusunSet.set(clean.toLowerCase(), clean);
+          }
+        };
+
+        hist.dusun.forEach(pushDusun);
+        AppState.db.pelanggan.forEach(p => {
+          const dName = DataHelpers.getDusunName(p.id_dusun);
+          if (dName && dName !== 'Dusun Tidak Diketahui') pushDusun(dName);
+        });
+        AppState.db.dusun.forEach(d => {
+          const name = String(d.nama_dusun ?? '').trim();
+          if (!name) return;
+          // Abaikan nama bawaan Dusun 1..7 jika belum pernah dipakai pelanggan atau riwayat
+          if (defaultPlaceholderPattern.test(name) && !usedDusunIds.has(d.id_dusun)) return;
+          pushDusun(name);
+        });
+
+        // Ambil riwayat RT & RW dari lokal maupun data pelanggan
+        const rtSet = new Map();
+        const rwSet = new Map();
+        const pushCode = (map, val) => {
+          const clean = String(val ?? '').trim();
+          if (!clean) return;
+          if (!map.has(clean.toLowerCase())) {
+            map.set(clean.toLowerCase(), clean);
+          }
+        };
+
+        hist.rt.forEach(v => pushCode(rtSet, v));
+        hist.rw.forEach(v => pushCode(rwSet, v));
+        AppState.db.pelanggan.forEach(p => {
+          pushCode(rtSet, p.rt);
+          pushCode(rwSet, p.rw);
+        });
+
+        return {
+          dusun: Array.from(dusunSet.values()),
+          rt: Array.from(rtSet.values()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+          rw: Array.from(rwSet.values()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        };
       }
     };
 
@@ -541,7 +706,8 @@
     };
 
     const AppState = {
-      apiUrl: localStorage.getItem('pam_kalikurmo_api_url') || DEFAULT_GAS_API_URL,
+      apiUrl: 'firebase://pdam-94a2f',
+      firebaseConnected: false,
       user: {
         id_user: 'USR-ADMIN',
         username: 'pengelola',
@@ -556,6 +722,8 @@
       pinLockoutUntil: 0,
       lastActivity: Date.now(),
       isOnline: navigator.onLine,
+      isSyncing: false,
+      inFlightWrites: 0,
       offlineQueue: [],
       processedIdempotencyIds: new Set(),
       currentPage: 'dashboard',
@@ -594,9 +762,28 @@
       }
     };
 
+    function persistDbCache() {
+      try {
+        localStorage.setItem(DB_CACHE_KEY, JSON.stringify(AppState.db));
+      } catch (e) { /* ignore quota errors */ }
+    }
+
+    function hydrateDbCache() {
+      try {
+        const raw = localStorage.getItem(DB_CACHE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.pengaturan) {
+            AppState.db = { ...AppState.db, ...parsed };
+            return true;
+          }
+        }
+      } catch (e) { /* ignore corrupt cache */ }
+      return false;
+    }
+
     function canManage(featureKey) {
-      if (!AppState.isUnlocked) return false;
-      return true;
+      return Boolean(AppState.isUnlocked);
     }
 
     function requireUnlockedAction(featureKey) {
@@ -620,293 +807,94 @@
         if (this.initialized) return;
         const db = AppState.db;
 
-        // Hash default PIN '112233'
-        db.pengaturan.pin_hash = await Utils.sha256('112233' + db.pengaturan.pin_salt);
+        if (!db.pengaturan.pin_hash) {
+          db.pengaturan.pin_hash = await Utils.sha256('112233' + db.pengaturan.pin_salt);
+        }
 
-        // Seed 3 Users
-        db.users = [
-          {
-            id_user: 'USR-001',
-            username: 'admin',
-            nama_lengkap: 'Slamet Riyadi (Admin)',
-            password_salt: 'S_ADM_01',
-            password_hash: await Utils.sha256('admin123S_ADM_01'),
-            role: 'Administrator',
-            aktif: true,
-            izin_akses: { ...DEFAULT_ROLE_PERMISSIONS.Administrator }
-          },
-          {
-            id_user: 'USR-002',
-            username: 'petugas',
-            nama_lengkap: 'Joko Susilo (Petugas Lapangan)',
-            password_salt: 'S_PTG_02',
-            password_hash: await Utils.sha256('petugas123S_PTG_02'),
-            role: 'Petugas',
-            aktif: true,
-            izin_akses: { ...DEFAULT_ROLE_PERMISSIONS.Petugas }
-          },
-          {
-            id_user: 'USR-003',
-            username: 'bendahara',
-            nama_lengkap: 'Siti Aminah, S.E. (Bendahara)',
-            password_salt: 'S_BND_03',
-            password_hash: await Utils.sha256('bendahara123S_BND_03'),
-            role: 'Bendahara',
-            aktif: true,
-            izin_akses: { ...DEFAULT_ROLE_PERMISSIONS.Bendahara }
-          }
-        ];
+        if (db.users.length === 0) {
+          db.users = [
+            {
+              id_user: 'USR-001',
+              username: 'admin',
+              nama_lengkap: 'Slamet Riyadi (Admin)',
+              password_salt: 'S_ADM_01',
+              password_hash: await Utils.sha256('admin123S_ADM_01'),
+              role: 'Administrator',
+              aktif: true,
+              izin_akses: { ...DEFAULT_ROLE_PERMISSIONS.Administrator }
+            },
+            {
+              id_user: 'USR-002',
+              username: 'petugas',
+              nama_lengkap: 'Joko Susilo (Petugas Lapangan)',
+              password_salt: 'S_PTG_02',
+              password_hash: await Utils.sha256('petugas123S_PTG_02'),
+              role: 'Petugas',
+              aktif: true,
+              izin_akses: { ...DEFAULT_ROLE_PERMISSIONS.Petugas }
+            },
+            {
+              id_user: 'USR-003',
+              username: 'bendahara',
+              nama_lengkap: 'Siti Aminah, S.E. (Bendahara)',
+              password_salt: 'S_BND_03',
+              password_hash: await Utils.sha256('bendahara123S_BND_03'),
+              role: 'Bendahara',
+              aktif: true,
+              izin_akses: { ...DEFAULT_ROLE_PERMISSIONS.Bendahara }
+            }
+          ];
+        }
 
-    
+        if (db.dusun.length === 0) {
+          db.dusun = [
+            { id_dusun: 'DSN-001', nama_dusun: 'Dusun 1', urutan: 1, aktif: true },
+            { id_dusun: 'DSN-002', nama_dusun: 'Dusun 2', urutan: 2, aktif: true },
+            { id_dusun: 'DSN-003', nama_dusun: 'Dusun 3', urutan: 3, aktif: true },
+            { id_dusun: 'DSN-004', nama_dusun: 'Dusun 4', urutan: 4, aktif: true },
+            { id_dusun: 'DSN-005', nama_dusun: 'Dusun 5', urutan: 5, aktif: true },
+            { id_dusun: 'DSN-006', nama_dusun: 'Dusun 6', urutan: 6, aktif: true },
+            { id_dusun: 'DSN-007', nama_dusun: 'Dusun 7', urutan: 7, aktif: true }
+          ];
+        }
 
-        // Seed Tariffs (Harga per m3 & Nominal Beban Bulanan)
-        db.tarif = [
-          {
-            id_tarif: 'TRF-RT',
-            golongan: 'Rumah Tangga',
-            nominal_beban: 1000,
-            tarif_dasar: 0,
-            harga_per_m3: 2000,
-            biaya_admin: 0,
-            biaya_pemeliharaan: 0,
-            denda_keterlambatan: 5000,
-            biaya_tambahan: 0
-          },
-          {
-            id_tarif: 'TRF-SOS',
-            golongan: 'Sosial / Tempat Ibadah',
-            nominal_beban: 1000,
-            tarif_dasar: 0,
-            harga_per_m3: 1000,
-            biaya_admin: 0,
-            biaya_pemeliharaan: 0,
-            denda_keterlambatan: 0,
-            biaya_tambahan: 0
-          },
-          {
-            id_tarif: 'TRF-NGA',
-            golongan: 'Usaha / Niaga',
-            nominal_beban: 2500,
-            tarif_dasar: 0,
-            harga_per_m3: 3500,
-            biaya_admin: 0,
-            biaya_pemeliharaan: 0,
-            denda_keterlambatan: 10000,
-            biaya_tambahan: 0
-          }
-        ];
-
-        // Seed Sample Customers across the 7 Dusun
-        const sampleCustomers = [
-          { id: 'PLG-1001', no: 'KLK-001', nama: 'Bapak Supriyanto', dusun: 'DSN-001', rt: '01', rw: '01', alamat: 'Krajan', telp: '62812281001', tgl: '2024-01-10', meter: 'MTR-8801', gol: 'Rumah Tangga', status: 'Aktif' },
-          { id: 'PLG-1002', no: 'KLK-002', nama: 'Ibu Sri Wahyuni', dusun: 'DSN-001', rt: '02', rw: '01', alamat: 'Krajan', telp: '62812281002', tgl: '2024-01-12', meter: 'MTR-8802', gol: 'Rumah Tangga', status: 'Aktif' },
-          { id: 'PLG-1003', no: 'KLK-003', nama: 'Bapak Muhamad Zaenal', dusun: 'DSN-002', rt: '01', rw: '02', alamat: 'Ngemplak', telp: '62812281003', tgl: '2024-02-05', meter: 'MTR-8803', gol: 'Rumah Tangga', status: 'Aktif' },
-          { id: 'PLG-1004', no: 'KLK-004', nama: 'Warung Makan Mbak Yanti', dusun: 'DSN-003', rt: '02', rw: '02', alamat: 'Jl. Raya Jetis No. 14', telp: '62812281004', tgl: '2024-02-18', meter: 'MTR-8804', gol: 'Usaha / Niaga', status: 'Aktif' },
-          { id: 'PLG-1005', no: 'KLK-005', nama: 'Masjid Al-Ikhlas', dusun: 'DSN-004', rt: '03', rw: '02', alamat: 'Karanganyar', telp: '62812281005', tgl: '2024-03-01', meter: 'MTR-8805', gol: 'Sosial / Tempat Ibadah', status: 'Aktif' },
-          { id: 'PLG-1006', no: 'KLK-006', nama: 'Bapak Bambang Hermanto', dusun: 'DSN-005', rt: '01', rw: '03', alamat: 'Sumberjo', telp: '62812281006', tgl: '2024-03-15', meter: 'MTR-8806', gol: 'Rumah Tangga', status: 'Aktif' },
-          { id: 'PLG-1007', no: 'KLK-007', nama: 'Ibu Endang Lestari', dusun: 'DSN-006', rt: '02', rw: '03', alamat: 'Wonosari', telp: '62812281007', tgl: '2024-04-02', meter: 'MTR-8807', gol: 'Rumah Tangga', status: 'Aktif' },
-          { id: 'PLG-1008', no: 'KLK-008', nama: 'Bapak Karsono', dusun: 'DSN-007', rt: '04', rw: '04', alamat: 'Kalikurmo Lor', telp: '62812281008', tgl: '2024-04-20', meter: 'MTR-8808', gol: 'Rumah Tangga', status: 'Nonaktif' }
-        ];
-
-        db.pelanggan = sampleCustomers.map(c => ({
-          id_pelanggan: c.id,
-          nomor_pelanggan: c.no,
-          nama_lengkap: c.nama,
-          id_dusun: c.dusun,
-          rt: c.rt,
-          rw: c.rw,
-          alamat: c.alamat,
-          no_telepon: c.telp,
-          tanggal_mulai: c.tgl,
-          nomor_meter: c.meter,
-          golongan: c.gol,
-          status: c.status,
-          keterangan: 'Sambungan reguler desa'
-        }));
-
-        const curPeriode = Utils.currentPeriode();
-        const prevDate = new Date();
-        prevDate.setMonth(prevDate.getMonth() - 1);
-        const prevPeriode = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-
-        // Seed Meter Readings
-        db.meterAir = [
-          { id_meter: 'MTR-REC-01', id_pelanggan: 'PLG-1001', periode: curPeriode, tanggal_catat: Utils.todayISO(), meter_sebelumnya: 120, meter_sekarang: 134, pemakaian: 14, petugas: 'Joko Susilo (Petugas Lapangan)' },
-          { id_meter: 'MTR-REC-02', id_pelanggan: 'PLG-1002', periode: curPeriode, tanggal_catat: Utils.todayISO(), meter_sebelumnya: 95, meter_sekarang: 106, pemakaian: 11, petugas: 'Joko Susilo (Petugas Lapangan)' },
-          { id_meter: 'MTR-REC-03', id_pelanggan: 'PLG-1003', periode: prevPeriode, tanggal_catat: `${prevPeriode}-25`, meter_sebelumnya: 210, meter_sekarang: 228, pemakaian: 18, petugas: 'Joko Susilo (Petugas Lapangan)' },
-          { id_meter: 'MTR-REC-04', id_pelanggan: 'PLG-1003', periode: curPeriode, tanggal_catat: Utils.todayISO(), meter_sebelumnya: 228, meter_sekarang: 245, pemakaian: 17, petugas: 'Joko Susilo (Petugas Lapangan)' },
-          { id_meter: 'MTR-REC-05', id_pelanggan: 'PLG-1004', periode: curPeriode, tanggal_catat: Utils.todayISO(), meter_sebelumnya: 410, meter_sekarang: 442, pemakaian: 32, petugas: 'Joko Susilo (Petugas Lapangan)' }
-        ];
-
-        // Seed Bills
-        db.tagihan = [
-          {
-            id_tagihan: 'TGH-2026-001',
-            id_pelanggan: 'PLG-1001',
-            periode: curPeriode,
-            meter_sebelumnya: 120,
-            meter_sekarang: 134,
-            pemakaian: 14,
-            tarif_snapshot: { nominal_beban: 1000, tarif_dasar: 0, harga_per_m3: 2000, biaya_admin: 0, biaya_pemeliharaan: 0, denda_keterlambatan: 5000 },
-            subtotal_air: 28000,
-            nominal_beban: 1000,
-            biaya_tetap: 1000,
-            denda: 0,
-            total_tagihan: 29000,
-            jumlah_dibayar: 29000,
-            sisa_tagihan: 0,
-            status: 'Lunas',
-            tanggal_buat: Utils.todayISO()
-          },
-          {
-            id_tagihan: 'TGH-2026-002',
-            id_pelanggan: 'PLG-1002',
-            periode: curPeriode,
-            meter_sebelumnya: 95,
-            meter_sekarang: 106,
-            pemakaian: 11,
-            tarif_snapshot: { nominal_beban: 1000, tarif_dasar: 0, harga_per_m3: 2000, biaya_admin: 0, biaya_pemeliharaan: 0, denda_keterlambatan: 5000 },
-            subtotal_air: 22000,
-            nominal_beban: 1000,
-            biaya_tetap: 1000,
-            denda: 0,
-            total_tagihan: 23000,
-            jumlah_dibayar: 0,
-            sisa_tagihan: 23000,
-            status: 'Belum Dibayar',
-            tanggal_buat: Utils.todayISO()
-          },
-          {
-            id_tagihan: 'TGH-2026-003',
-            id_pelanggan: 'PLG-1003',
-            periode: prevPeriode,
-            meter_sebelumnya: 210,
-            meter_sekarang: 228,
-            pemakaian: 18,
-            tarif_snapshot: { nominal_beban: 1000, tarif_dasar: 0, harga_per_m3: 2000, biaya_admin: 0, biaya_pemeliharaan: 0, denda_keterlambatan: 5000 },
-            subtotal_air: 36000,
-            nominal_beban: 1000,
-            biaya_tetap: 1000,
-            denda: 5000,
-            total_tagihan: 42000,
-            jumlah_dibayar: 0,
-            sisa_tagihan: 42000,
-            status: 'Terlambat',
-            tanggal_buat: `${prevPeriode}-26`
-          },
-          {
-            id_tagihan: 'TGH-2026-004',
-            id_pelanggan: 'PLG-1003',
-            periode: curPeriode,
-            meter_sebelumnya: 228,
-            meter_sekarang: 245,
-            pemakaian: 17,
-            tarif_snapshot: { nominal_beban: 1000, tarif_dasar: 0, harga_per_m3: 2000, biaya_admin: 0, biaya_pemeliharaan: 0, denda_keterlambatan: 5000 },
-            subtotal_air: 34000,
-            nominal_beban: 1000,
-            biaya_tetap: 1000,
-            denda: 0,
-            total_tagihan: 35000,
-            jumlah_dibayar: 0,
-            sisa_tagihan: 35000,
-            status: 'Belum Dibayar',
-            tanggal_buat: Utils.todayISO()
-          },
-          {
-            id_tagihan: 'TGH-2026-005',
-            id_pelanggan: 'PLG-1004',
-            periode: curPeriode,
-            meter_sebelumnya: 410,
-            meter_sekarang: 442,
-            pemakaian: 32,
-            tarif_snapshot: { nominal_beban: 2500, tarif_dasar: 0, harga_per_m3: 3500, biaya_admin: 0, biaya_pemeliharaan: 0, denda_keterlambatan: 10000 },
-            subtotal_air: 112000,
-            nominal_beban: 2500,
-            biaya_tetap: 2500,
-            denda: 0,
-            total_tagihan: 114500,
-            jumlah_dibayar: 114500,
-            sisa_tagihan: 0,
-            status: 'Lunas',
-            tanggal_buat: Utils.todayISO()
-          }
-        ];
-
-        // Seed Payments
-        db.pembayaran = [
-          {
-            id_pembayaran: 'TRX-2026-0001',
-            id_tagihan: 'TGH-2026-001',
-            id_pelanggan: 'PLG-1001',
-            periode: curPeriode,
-            tanggal_bayar: new Date().toISOString(),
-            jumlah_bayar: 29000,
-            sisa_tunggakan: 0,
-            metode: 'Tunai',
-            jenis: 'Pembayaran Penuh',
-            petugas: 'Pengelola PAM Kalikurmo',
-            keterangan: 'Pembayaran lunas loket desa',
-            status: 'Sah'
-          },
-          {
-            id_pembayaran: 'TRX-2026-0002',
-            id_tagihan: 'TGH-2026-005',
-            id_pelanggan: 'PLG-1004',
-            periode: curPeriode,
-            tanggal_bayar: new Date().toISOString(),
-            jumlah_bayar: 114500,
-            sisa_tunggakan: 0,
-            metode: 'Transfer Bank',
-            jenis: 'Pembayaran Penuh',
-            petugas: 'Pengelola PAM Kalikurmo',
-            keterangan: 'Transfer BRI Desa Kalikurmo',
-            status: 'Sah'
-          }
-        ];
-
-        // Seed Additional Income & Expenses
-        db.pemasukanLain = [
-          {
-            id_pemasukan: 'MSK-2026-001',
-            tanggal: Utils.todayISO(),
-            kategori: 'Pemasangan sambungan baru',
-            keterangan: 'Biaya pasang baru SR Ibu Endang Lestari',
-            nominal: 450000,
-            penerima: 'Bendahara PAM',
-            petugas: 'Siti Aminah, S.E. (Bendahara)'
-          }
-        ];
-
-        db.pengeluaran = [
-          {
-            id_pengeluaran: 'KLR-2026-001',
-            tanggal: Utils.todayISO(),
-            kategori: 'Listrik pompa',
-            keterangan: 'Token listrik pompa sumur bor utama Dusun 1',
-            nominal: 350000,
-            penerima: 'PLN / Loket PPOB',
-            petugas: 'Siti Aminah, S.E. (Bendahara)'
-          },
-          {
-            id_pengeluaran: 'KLR-2026-002',
-            tanggal: Utils.todayISO(),
-            kategori: 'Pembelian pipa',
-            keterangan: 'Pipa PVC 2 inch & lem sambungan perbaikan jaringan',
-            nominal: 215000,
-            penerima: 'TB. Sumber Rejeki',
-            petugas: 'Siti Aminah, S.E. (Bendahara)'
-          }
-        ];
-
-        db.auditLog = [
-          {
-            id_log: 'LOG-001',
-            waktu: new Date().toISOString(),
-            user: 'System',
-            aksi: 'INIT_DATABASE',
-            detail: 'Inisialisasi awal database PAM Desa Kalikurmo selesai.'
-          }
-        ];
+        if (db.tarif.length === 0) {
+          db.tarif = [
+            {
+              id_tarif: 'TRF-RT',
+              golongan: 'Rumah Tangga',
+              nominal_beban: 1000,
+              tarif_dasar: 0,
+              harga_per_m3: 2000,
+              biaya_admin: 0,
+              biaya_pemeliharaan: 0,
+              denda_keterlambatan: 5000,
+              biaya_tambahan: 0
+            },
+            {
+              id_tarif: 'TRF-SOS',
+              golongan: 'Sosial / Tempat Ibadah',
+              nominal_beban: 1000,
+              tarif_dasar: 0,
+              harga_per_m3: 1000,
+              biaya_admin: 0,
+              biaya_pemeliharaan: 0,
+              denda_keterlambatan: 0,
+              biaya_tambahan: 0
+            },
+            {
+              id_tarif: 'TRF-NGA',
+              golongan: 'Usaha / Niaga',
+              nominal_beban: 2500,
+              tarif_dasar: 0,
+              harga_per_m3: 3500,
+              biaya_admin: 0,
+              biaya_pemeliharaan: 0,
+              denda_keterlambatan: 10000,
+              biaya_tambahan: 0
+            }
+          ];
+        }
 
         this.initialized = true;
       }
@@ -914,7 +902,294 @@
 
     /**
      * =========================================================================
-     * MODULE 4: API GATEWAY (CORS-SAFE GOOGLE APPS SCRIPT + CLOUD SYNC)
+     * MODULE 3B: FIREBASE CLOUD FIRESTORE REAL-TIME ENGINE (pdam-94a2f)
+     * =========================================================================
+     */
+    const FirebaseSyncEngine = {
+      started: false,
+      unsubscribers: [],
+      refreshDebounce: null,
+
+      getBridge() {
+        return window.FirebaseBridge || null;
+      },
+
+      scheduleLiveRefresh() {
+        clearTimeout(this.refreshDebounce);
+        this.refreshDebounce = setTimeout(() => {
+          persistDbCache();
+          updateBrandLabels();
+          updateLockStateUI();
+          const badgeTunggakan = document.getElementById('badge-tunggakan-count');
+          if (badgeTunggakan) {
+            badgeTunggakan.textContent = DataHelpers.getTunggakanPerPelanggan().length;
+          }
+
+          const modalOpen = !document.getElementById('app-modal')?.classList.contains('hidden');
+          const pinOpen = !document.getElementById('pin-lock-modal')?.classList.contains('hidden');
+          if (modalOpen || pinOpen) return;
+
+          if (AppState.currentPage === 'pelanggan') {
+            updatePelangganTableBody();
+          } else if (AppState.currentPage === 'meter') {
+            updateMeterTableBody();
+          } else if (AppState.currentPage === 'tagihan') {
+            updateTagihanTableBody();
+          } else if (AppState.currentPage === 'tunggakan') {
+            updateTunggakanTableBody();
+          } else {
+            renderCurrentPage(false);
+          }
+        }, 120);
+      },
+
+      async start() {
+        if (this.started) return;
+        const fb = this.getBridge();
+        if (!fb) {
+          window.addEventListener('firebase-bridge-ready', () => this.start(), { once: true });
+          return;
+        }
+        this.started = true;
+        setSyncIndicator('syncing');
+
+        try {
+          const settingsRef = fb.doc(fb.db, 'pam_pengaturan', 'main');
+          const settingsSnap = await fb.getDoc(settingsRef);
+
+          if (!settingsSnap.exists()) {
+            // Inisialisasi data awal PAM Desa Kalikurmo ke Firestore saat pertama kali dipakai
+            await fb.setDoc(settingsRef, { ...AppState.db.pengaturan });
+
+            for (const d of AppState.db.dusun) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_dusun', d.id_dusun), { ...d });
+            }
+            for (const tf of AppState.db.tarif) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_tarif', tf.id_tarif), { ...tf });
+            }
+            for (const u of AppState.db.users) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_users', u.id_user), { ...u });
+            }
+          }
+
+          // Pasang listener real-time (onSnapshot) untuk seluruh koleksi database
+          const unsubSettings = fb.onSnapshot(
+            settingsRef,
+            (snap) => {
+              if (snap.exists()) {
+                const remoteCfg = snap.data();
+                AppState.db.pengaturan = { ...AppState.db.pengaturan, ...remoteCfg };
+                this.scheduleLiveRefresh();
+              }
+              AppState.firebaseConnected = true;
+              setSyncIndicator('online');
+            },
+            (err) => {
+              console.error('Firestore settings listener error:', err);
+              setSyncIndicator('error');
+            }
+          );
+          this.unsubscribers.push(unsubSettings);
+
+          const collectionMappings = [
+            { col: 'pam_dusun', key: 'dusun', idField: 'id_dusun' },
+            { col: 'pam_pelanggan', key: 'pelanggan', idField: 'id_pelanggan' },
+            { col: 'pam_meterAir', key: 'meterAir', idField: 'id_meter' },
+            { col: 'pam_tarif', key: 'tarif', idField: 'id_tarif' },
+            { col: 'pam_tagihan', key: 'tagihan', idField: 'id_tagihan' },
+            { col: 'pam_pembayaran', key: 'pembayaran', idField: 'id_pembayaran', sortDescField: 'tanggal_bayar' },
+            { col: 'pam_pengeluaran', key: 'pengeluaran', idField: 'id_pengeluaran', sortDescField: 'tanggal' },
+            { col: 'pam_pemasukanLain', key: 'pemasukanLain', idField: 'id_pemasukan', sortDescField: 'tanggal' },
+            { col: 'pam_users', key: 'users', idField: 'id_user' },
+            { col: 'pam_auditLog', key: 'auditLog', idField: 'id_log', sortDescField: 'waktu' }
+          ];
+
+          for (const mapCfg of collectionMappings) {
+            const colRef = fb.collection(fb.db, mapCfg.col);
+            const unsub = fb.onSnapshot(
+              colRef,
+              (querySnap) => {
+                const items = [];
+                querySnap.forEach((docSnap) => {
+                  items.push({ ...docSnap.data(), [mapCfg.idField]: docSnap.id });
+                });
+                if (mapCfg.sortDescField) {
+                  items.sort((a, b) => String(b[mapCfg.sortDescField] ?? '').localeCompare(String(a[mapCfg.sortDescField] ?? '')));
+                }
+                if (mapCfg.key === 'auditLog' && items.length > 200) {
+                  items.length = 200;
+                }
+                // Jangan timpa koleksi dengan array kosong jika koleksi belum pernah diisi
+                if (items.length > 0 || querySnap.metadata.fromCache === false) {
+                  if (mapCfg.key === 'tarif' && items.length === 0) return;
+                  if (mapCfg.key === 'dusun' && items.length === 0) return;
+                  AppState.db[mapCfg.key] = items;
+                  this.scheduleLiveRefresh();
+                }
+                AppState.firebaseConnected = true;
+                setSyncIndicator('online');
+              },
+              (err) => {
+                console.error(`Firestore listener error (${mapCfg.col}):`, err);
+                setSyncIndicator('error');
+              }
+            );
+            this.unsubscribers.push(unsub);
+          }
+        } catch (err) {
+          console.error('Firebase initialization error:', err);
+          setSyncIndicator('error');
+        }
+      },
+
+      async persistAction(action, payload) {
+        const fb = this.getBridge();
+        if (!fb) return;
+
+        const db = AppState.db;
+        const cleanObj = (obj) => JSON.parse(JSON.stringify(obj));
+
+        switch (action) {
+          case 'gantiPIN':
+          case 'savePengaturan': {
+            await fb.setDoc(fb.doc(fb.db, 'pam_pengaturan', 'main'), cleanObj(db.pengaturan), { merge: true });
+            break;
+          }
+
+          case 'saveDusun':
+          case 'reorderDusun': {
+            for (const d of db.dusun) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_dusun', d.id_dusun), cleanObj(d), { merge: true });
+            }
+            break;
+          }
+
+          case 'deleteDusun': {
+            if (payload.id_dusun) {
+              await fb.deleteDoc(fb.doc(fb.db, 'pam_dusun', payload.id_dusun));
+            }
+            break;
+          }
+
+          case 'savePelanggan': {
+            for (const d of db.dusun) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_dusun', d.id_dusun), cleanObj(d), { merge: true });
+            }
+            for (const p of db.pelanggan) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_pelanggan', p.id_pelanggan), cleanObj(p), { merge: true });
+            }
+            break;
+          }
+
+          case 'deletePelanggan': {
+            if (payload.id_pelanggan) {
+              await fb.deleteDoc(fb.doc(fb.db, 'pam_pelanggan', payload.id_pelanggan));
+              const cancelledBills = db.tagihan.filter(t => t.id_pelanggan === payload.id_pelanggan && t.status === 'Dibatalkan');
+              for (const b of cancelledBills) {
+                await fb.setDoc(fb.doc(fb.db, 'pam_tagihan', b.id_tagihan), cleanObj(b), { merge: true });
+              }
+            }
+            break;
+          }
+
+          case 'catatMeter': {
+            const recs = payload.records || [];
+            for (const r of recs) {
+              const mObj = db.meterAir.find(m => m.id_pelanggan === r.id_pelanggan && m.periode === r.periode);
+              if (mObj) {
+                await fb.setDoc(fb.doc(fb.db, 'pam_meterAir', mObj.id_meter), cleanObj(mObj), { merge: true });
+              }
+              const bObj = db.tagihan.find(t => t.id_pelanggan === r.id_pelanggan && t.periode === r.periode && t.status !== 'Dibatalkan');
+              if (bObj) {
+                await fb.setDoc(fb.doc(fb.db, 'pam_tagihan', bObj.id_tagihan), cleanObj(bObj), { merge: true });
+              }
+            }
+            break;
+          }
+
+          case 'saveTarif': {
+            for (const tf of db.tarif) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_tarif', tf.id_tarif), cleanObj(tf), { merge: true });
+            }
+            break;
+          }
+
+          case 'buatTagihan': {
+            const periodeBills = db.tagihan.filter(t => t.periode === payload.periode);
+            for (const b of periodeBills) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_tagihan', b.id_tagihan), cleanObj(b), { merge: true });
+            }
+            break;
+          }
+
+          case 'batalkanTagihan': {
+            const b = db.tagihan.find(x => x.id_tagihan === payload.id_tagihan);
+            if (b) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_tagihan', b.id_tagihan), cleanObj(b), { merge: true });
+            }
+            break;
+          }
+
+          case 'catatPembayaran': {
+            const selectedIds = payload.tagihanIds || [];
+            for (const bId of selectedIds) {
+              const b = db.tagihan.find(x => x.id_tagihan === bId);
+              if (b) {
+                await fb.setDoc(fb.doc(fb.db, 'pam_tagihan', b.id_tagihan), cleanObj(b), { merge: true });
+              }
+            }
+            const latestTrx = db.pembayaran[0];
+            if (latestTrx) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_pembayaran', latestTrx.id_pembayaran), cleanObj(latestTrx), { merge: true });
+            }
+            break;
+          }
+
+          case 'batalkanPembayaran': {
+            const trx = db.pembayaran.find(x => x.id_pembayaran === payload.id_pembayaran);
+            if (trx) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_pembayaran', trx.id_pembayaran), cleanObj(trx), { merge: true });
+              const billIds = String(trx.id_tagihan || '').split(',').map(s => s.trim());
+              for (const bId of billIds) {
+                const b = db.tagihan.find(x => x.id_tagihan === bId);
+                if (b) {
+                  await fb.setDoc(fb.doc(fb.db, 'pam_tagihan', b.id_tagihan), cleanObj(b), { merge: true });
+                }
+              }
+            }
+            break;
+          }
+
+          case 'catatKeuangan': {
+            if (payload.tipe === 'pemasukan' && db.pemasukanLain[0]) {
+              const m = db.pemasukanLain[0];
+              await fb.setDoc(fb.doc(fb.db, 'pam_pemasukanLain', m.id_pemasukan), cleanObj(m), { merge: true });
+            } else if (payload.tipe === 'pengeluaran' && db.pengeluaran[0]) {
+              const k = db.pengeluaran[0];
+              await fb.setDoc(fb.doc(fb.db, 'pam_pengeluaran', k.id_pengeluaran), cleanObj(k), { merge: true });
+            }
+            break;
+          }
+
+          case 'saveUser': {
+            for (const u of db.users) {
+              await fb.setDoc(fb.doc(fb.db, 'pam_users', u.id_user), cleanObj(u), { merge: true });
+            }
+            break;
+          }
+        }
+
+        // Simpan log aktivitas terbaru ke Firestore
+        if (db.auditLog[0]) {
+          const logItem = db.auditLog[0];
+          await fb.setDoc(fb.doc(fb.db, 'pam_auditLog', logItem.id_log), cleanObj(logItem), { merge: true });
+        }
+      }
+    };
+
+    /**
+     * =========================================================================
+     * MODULE 4: API GATEWAY (OPTIMISTIC UI + REAL-TIME FIREBASE FIRESTORE)
      * =========================================================================
      */
     const ApiClient = {
@@ -923,72 +1198,38 @@
           return { success: true, duplicateIgnored: true, message: 'Transaksi sudah diproses sebelumnya.' };
         }
 
-        if (AppState.apiUrl) {
-          try {
-            const body = JSON.stringify({
-              action,
-              sessionToken: AppState.sessionToken,
-              userId: AppState.user?.id_user || null,
-              isUnlocked: AppState.isUnlocked,
-              ...payload
-            });
-
-            const response = await fetch(AppState.apiUrl, {
-              method: 'POST',
-              redirect: 'follow',
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body
-            });
-
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: Gagal terhubung ke server Google Apps Script.`);
-            }
-
-            const result = await response.json();
-            if (payload.idempotencyKey && result.success) {
-              AppState.processedIdempotencyIds.add(payload.idempotencyKey);
-            }
-            return result;
-          } catch (err) {
-            if (payload.queueable && !navigator.onLine) {
-              this.enqueueOffline(action, payload);
-              return { success: true, queued: true, message: 'Koneksi terputus. Transaksi masuk antrean aman dan akan terkirim otomatis saat online.' };
-            }
-            throw err;
-          }
-        }
-
         await CloudSimulator.init();
+
+        // 1. Proses validasi & pembaruan state lokal secara instan (<5ms)
         const res = await this.simulateBackend(action, payload);
-        if (payload.idempotencyKey && res.success) {
+        if (!res.success) return res;
+
+        persistDbCache();
+        if (payload.idempotencyKey) {
           AppState.processedIdempotencyIds.add(payload.idempotencyKey);
         }
+
+        // 2. Sinkronkan perubahan ke Firebase Cloud Firestore secara real-time
+        if (action !== 'syncAll') {
+          AppState.inFlightWrites += 1;
+          setSyncIndicator('syncing');
+          FirebaseSyncEngine.persistAction(action, payload)
+            .then(() => {
+              setSyncIndicator('online');
+            })
+            .catch((err) => {
+              console.error('Firebase write error:', err);
+              setSyncIndicator('error');
+            })
+            .finally(() => {
+              AppState.inFlightWrites = Math.max(0, AppState.inFlightWrites - 1);
+            });
+        }
+
         return res;
       },
 
-      enqueueOffline(action, payload) {
-        AppState.offlineQueue.push({
-          id: Utils.generateId('Q'),
-          action,
-          payload,
-          timestamp: new Date().toISOString()
-        });
-        updateOfflineQueueUI();
-      },
-
       async flushOfflineQueue() {
-        if (!navigator.onLine || AppState.offlineQueue.length === 0) return;
-        const pending = [...AppState.offlineQueue];
-        AppState.offlineQueue = [];
-        updateOfflineQueueUI();
-
-        for (const item of pending) {
-          try {
-            await this.request(item.action, item.payload);
-          } catch (e) {
-            AppState.offlineQueue.push(item);
-          }
-        }
         updateOfflineQueueUI();
       },
 
@@ -1000,7 +1241,7 @@
           aksi,
           detail
         });
-        if (AppState.db.auditLog.length > 250) AppState.db.auditLog.pop();
+        if (AppState.db.auditLog.length > 200) AppState.db.auditLog.pop();
       },
 
       async simulateBackend(action, payload) {
@@ -1093,7 +1334,7 @@
             let resolvedDusunId = item.id_dusun || '';
             const manualDusunName = (item.nama_dusun_manual || '').trim();
             if (manualDusunName) {
-              const foundDusun = db.dusun.find(d => d.nama_dusun.toLowerCase() === manualDusunName.toLowerCase());
+              const foundDusun = db.dusun.find(d => String(d.nama_dusun ?? '').toLowerCase() === manualDusunName.toLowerCase());
               if (foundDusun) {
                 resolvedDusunId = foundDusun.id_dusun;
               } else {
@@ -1112,17 +1353,20 @@
             const cleanItem = {
               ...item,
               id_dusun: resolvedDusunId,
-              rt: (item.rt || '').trim(),
-              rw: (item.rw || '').trim()
+              rt: String(item.rt ?? '').trim(),
+              rw: String(item.rw ?? '').trim()
             };
             delete cleanItem.nama_dusun_manual;
+
+            // Simpan riwayat pengisian Dusun, RT, dan RW agar muncul sebagai pilihan tinggal klik berikutnya
+            InputHistory.record(manualDusunName || DataHelpers.getDusunName(resolvedDusunId), cleanItem.rt, cleanItem.rw);
 
             if (cleanItem.id_pelanggan) {
               const idx = db.pelanggan.findIndex(p => p.id_pelanggan === cleanItem.id_pelanggan);
               if (idx > -1) db.pelanggan[idx] = { ...db.pelanggan[idx], ...cleanItem };
               this.addAudit('UPDATE_PELANGGAN', `Memperbarui pelanggan ${cleanItem.nama_lengkap} (${cleanItem.nomor_pelanggan})`);
             } else {
-              const dupNo = db.pelanggan.some(p => p.nomor_pelanggan.toLowerCase() === cleanItem.nomor_pelanggan.toLowerCase());
+              const dupNo = db.pelanggan.some(p => String(p.nomor_pelanggan ?? '').toLowerCase() === String(cleanItem.nomor_pelanggan ?? '').toLowerCase());
               if (dupNo) return { success: false, message: 'Nomor pelanggan sudah digunakan!' };
               const newP = {
                 ...cleanItem,
@@ -1417,7 +1661,7 @@
               }
               this.addAudit('UPDATE_USER', `Memperbarui akun pengguna ${item.username}`);
             } else {
-              if (db.users.some(u => u.username.toLowerCase() === item.username.toLowerCase())) {
+              if (db.users.some(u => String(u.username ?? '').toLowerCase() === String(item.username ?? '').toLowerCase())) {
                 return { success: false, message: 'Username sudah terdaftar.' };
               }
               const salt = 'S_' + Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -1451,7 +1695,7 @@
 
     /**
      * =========================================================================
-     * MODULE 5: COMPUTED DATA HELPERS (SINGLE SOURCE OF TRUTH)
+     * MODULE 5: COMPUTED DATA HELPERS (SINGLE SOURCE OF TRUTH + SMART SEARCH)
      * =========================================================================
      */
     const DataHelpers = {
@@ -1462,6 +1706,28 @@
 
       getPelangganById(id_pelanggan) {
         return AppState.db.pelanggan.find(p => p.id_pelanggan === id_pelanggan) || null;
+      },
+
+      matchesPelangganSearch(p, rawQuery) {
+        const q = String(rawQuery ?? '').toLowerCase().trim();
+        if (!q) return true;
+        const nama = String(p?.nama_lengkap ?? '').toLowerCase();
+        const noPlg = String(p?.nomor_pelanggan ?? '').toLowerCase();
+        const noMtr = String(p?.nomor_meter ?? '').toLowerCase();
+        const dusun = String(this.getDusunName(p?.id_dusun) ?? '').toLowerCase();
+        const alamat = String(p?.alamat ?? '').toLowerCase();
+        return nama.includes(q) || noPlg.includes(q) || noMtr.includes(q) || dusun.includes(q) || alamat.includes(q);
+      },
+
+      rankSearchScore(namaStr, queryStr) {
+        const q = String(queryStr ?? '').toLowerCase().trim();
+        if (!q) return 0;
+        const nama = String(namaStr ?? '').toLowerCase();
+        if (nama === q) return 0;
+        if (nama.startsWith(q)) return 1;
+        if (nama.split(/\s+/).some(word => word.startsWith(q))) return 2;
+        if (nama.includes(q)) return 3;
+        return 4;
       },
 
       evaluateLateFees() {
@@ -1539,11 +1805,11 @@
               const p = this.getPelangganById(t.id_pelanggan);
               map.set(t.id_pelanggan, {
                 id_pelanggan: t.id_pelanggan,
-                nomor_pelanggan: p?.nomor_pelanggan || '-',
-                nama_lengkap: p?.nama_lengkap || 'Pelanggan Dihapus',
+                nomor_pelanggan: String(p?.nomor_pelanggan ?? '-'),
+                nama_lengkap: String(p?.nama_lengkap ?? 'Pelanggan Dihapus'),
                 id_dusun: p?.id_dusun || '',
                 nama_dusun: this.getDusunName(p?.id_dusun),
-                no_telepon: p?.no_telepon || '',
+                no_telepon: String(p?.no_telepon ?? ''),
                 jumlah_bulan: 0,
                 total_pokok: 0,
                 total_denda: 0,
@@ -1570,30 +1836,24 @@
      */
     function openApiConfigModal() {
       Swal.fire({
-        title: 'Konfigurasi Backend Google Apps Script',
+        title: 'Status Database Cloud Firebase',
         html: `
-          <div class="text-left space-y-3 text-sm">
-            <p class="text-slate-600 text-xs">Masukkan URL Web App Google Apps Script (berakhiran <code>/exec</code>) untuk menghubungkan database cloud Google Sheets, atau kosongkan untuk menggunakan Mode Simulasi Lokal.</p>
-            <input id="swal-gas-url" type="url" value="${Utils.escapeHtml(AppState.apiUrl)}" placeholder="https://script.google.com/macros/s/.../exec"
-              class="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs font-mono" />
+          <div class="text-left space-y-3 text-xs">
+            <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-1">
+              <p class="font-extrabold text-sm flex items-center gap-1.5">Terhubung ke Cloud Firestore</p>
+              <p>Project ID: <code class="font-mono font-bold">${FIREBASE_PROJECT_ID}</code></p>
+              <p>Mode Sinkronisasi: <strong>Real-Time Otomatis (onSnapshot)</strong></p>
+            </div>
+            <p class="text-slate-600">Setiap perubahan data pelanggan, pencatatan meter, tagihan, pembayaran, maupun kas akan langsung tersimpan ke Firebase dan otomatis muncul di semua HP &amp; komputer yang membuka aplikasi ini.</p>
           </div>
         `,
+        confirmButtonText: 'Sinkronkan Ulang Sekarang',
         showCancelButton: true,
-        confirmButtonText: 'Simpan Koneksi',
-        cancelButtonText: 'Batal',
+        cancelButtonText: 'Tutup',
         confirmButtonColor: '#2563eb'
       }).then(async (res) => {
         if (res.isConfirmed) {
-          const url = document.getElementById('swal-gas-url').value.trim();
-          AppState.apiUrl = url;
-          if (url) {
-            localStorage.setItem('pam_kalikurmo_api_url', url);
-          } else {
-            localStorage.removeItem('pam_kalikurmo_api_url');
-          }
-          updateConnectionModeBanner();
-          await syncFromCloud(true);
-          Utils.toast('success', url ? 'URL Cloud Disimpan' : 'Mode Simulasi Aktif');
+          await syncFromCloud(true, true);
         }
       });
     }
@@ -1601,7 +1861,7 @@
     function updateConnectionModeBanner() {
       const sbCloud = document.getElementById('sidebar-cloud-status');
       if (sbCloud) {
-        sbCloud.textContent = AppState.apiUrl ? 'Cloud Google Sheets Aktif' : 'Atur Cloud Google Sheets';
+        sbCloud.textContent = `Firebase Cloud: ${FIREBASE_PROJECT_ID}`;
       }
     }
 
@@ -1664,10 +1924,10 @@
         label.textContent = 'Offline';
       } else if (state === 'error') {
         dot.className = 'w-2 h-2 rounded-full bg-amber-500';
-        label.textContent = 'Gagal Sinkron';
+        label.textContent = 'Cek Rules Firebase';
       } else {
         dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
-        label.textContent = AppState.apiUrl ? 'Online (Cloud)' : 'Online (Lokal)';
+        label.textContent = 'Online (Firebase)';
       }
     }
 
@@ -1682,46 +1942,51 @@
       }
     }
 
-    async function syncFromCloud(showToast = false) {
+    function isUserActivelyEditing() {
+      const modalOpen = !document.getElementById('app-modal')?.classList.contains('hidden');
+      const pinOpen = !document.getElementById('pin-lock-modal')?.classList.contains('hidden');
+      const activeTag = document.activeElement?.tagName;
+      const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+      return modalOpen || pinOpen || isTyping;
+    }
+
+    async function syncFromCloud(showToast = false, refreshView = false) {
       if (!navigator.onLine) {
         setSyncIndicator('offline');
         return;
       }
+
       setSyncIndicator('syncing');
       try {
-        await ApiClient.flushOfflineQueue();
-        const res = await ApiClient.request('syncAll');
-        if (res.success && res.data) {
-          AppState.db = { ...AppState.db, ...res.data };
-          updateBrandLabels();
-          updateLockStateUI();
-          const badgeTunggakan = document.getElementById('badge-tunggakan-count');
-          if (badgeTunggakan) {
-            badgeTunggakan.textContent = DataHelpers.getTunggakanPerPelanggan().length;
-          }
-          if (showToast) {
-            renderCurrentPage();
-            Utils.toast('success', 'Sinkronisasi Berhasil');
-          }
+        await FirebaseSyncEngine.start();
+        updateBrandLabels();
+        updateLockStateUI();
+        const badgeTunggakan = document.getElementById('badge-tunggakan-count');
+        if (badgeTunggakan) {
+          badgeTunggakan.textContent = DataHelpers.getTunggakanPerPelanggan().length;
+        }
+        if (refreshView && !isUserActivelyEditing()) {
+          renderCurrentPage();
         }
         setSyncIndicator('online');
+        if (showToast) {
+          Utils.toast('success', 'Terhubung Real-Time ke Firebase');
+        }
       } catch (err) {
         setSyncIndicator('error');
         if (showToast) {
-          Utils.toast('error', 'Gagal Sinkronisasi', err.message || 'Periksa koneksi internet / URL API.');
+          Utils.toast('error', 'Gagal Sinkronisasi Firebase', err.message || 'Periksa koneksi internet.');
         }
       }
     }
 
     function triggerManualSync() {
-      syncFromCloud(true);
+      syncFromCloud(true, true);
     }
 
     function startAutoSyncLoop() {
       if (AppState.syncTimer) clearInterval(AppState.syncTimer);
-      AppState.syncTimer = setInterval(() => {
-        syncFromCloud(false);
-      }, 8000);
+      FirebaseSyncEngine.start();
     }
 
     function toggleMobileSidebar(open) {
@@ -1742,11 +2007,11 @@
       const box = document.getElementById('app-modal-box');
       const titleEl = document.getElementById('app-modal-title');
       const bodyEl = document.getElementById('app-modal-body');
-      box.className = `bg-white rounded-3xl shadow-2xl border border-slate-200 w-full ${maxWidthClass} overflow-hidden my-8`;
+      box.className = `modal-enter bg-white rounded-3xl shadow-2xl border border-slate-200 w-full ${maxWidthClass} overflow-hidden my-8`;
       titleEl.textContent = title;
       bodyEl.innerHTML = bodyHtml;
       modal.classList.remove('hidden');
-      lucide.createIcons();
+      refreshIcons(box);
     }
 
     function closeAppModal() {
@@ -1763,7 +2028,7 @@
       tunggakan: ['Manajemen Tunggakan', 'Pemantauan tunggakan pelanggan & pengingat otomatis WhatsApp'],
       keuangan: ['Pembukuan Keuangan', 'Buku kas umum terintegrasi (pemasukan air, pemasukan lain, dan pengeluaran)'],
       laporan: ['Laporan Keuangan', '10 jenis laporan administrasi & keuangan resmi dengan blok tanda tangan'],
-      dusun: ['Manajemen Dusun', 'Pengaturan 7 dusun Desa Kalikurmo berbasis ID permanen'],
+      dusun: ['Manajemen Dusun', 'Pengaturan wilayah dusun Desa Kalikurmo berbasis ID permanen'],
       pengguna: ['Manajemen Pengguna', 'Pengaturan akun pengurus & log aktivitas keamanan (AuditLog)'],
       keamanan: ['Keamanan Aplikasi (PIN)', 'Pengaturan PIN 6 digit & penguncian otomatis aplikasi'],
       pengaturan: ['Pengaturan Aplikasi', 'Identitas desa, parameter pembukuan, koneksi cloud, dan backup database']
@@ -1775,9 +2040,9 @@
 
       document.querySelectorAll('.nav-item').forEach(btn => {
         if (btn.dataset.nav === page) {
-          btn.className = 'nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold transition bg-blue-600 text-white shadow-md shadow-blue-600/30';
+          btn.className = 'nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold transition-colors duration-100 bg-blue-600 text-white shadow-md shadow-blue-600/30';
         } else {
-          btn.className = 'nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition text-slate-300 hover:bg-slate-800 hover:text-white';
+          btn.className = 'nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors duration-100 text-slate-300 hover:bg-slate-800 hover:text-white';
         }
       });
 
@@ -1785,12 +2050,18 @@
       document.getElementById('page-title').textContent = meta[0];
       document.getElementById('page-subtitle').textContent = meta[1];
 
-      renderCurrentPage();
+      renderCurrentPage(true);
     }
 
-    function renderCurrentPage() {
+    function renderCurrentPage(animate = false) {
       const container = document.getElementById('main-content');
       if (!container) return;
+
+      if (animate) {
+        container.classList.remove('page-enter');
+        void container.offsetWidth;
+        container.classList.add('page-enter');
+      }
 
       const badgeTunggakan = document.getElementById('badge-tunggakan-count');
       if (badgeTunggakan) {
@@ -1813,7 +2084,7 @@
         default: renderDashboard(container);
       }
 
-      lucide.createIcons();
+      refreshIcons(container);
     }
 
     function enterAppShell() {
@@ -1826,6 +2097,7 @@
       startAutoSyncLoop();
       setupAutoLockListeners();
       navigateTo('dashboard');
+      refreshIcons(document.body);
     }
 
     // --- PIN LOCK KEYPAD LOGIC ---
@@ -1833,8 +2105,9 @@
       AppState.pinBuffer = '';
       updatePinDotsUI();
       document.getElementById('pin-error-banner').classList.add('hidden');
-      document.getElementById('pin-lock-modal').classList.remove('hidden');
-      lucide.createIcons();
+      const modal = document.getElementById('pin-lock-modal');
+      modal.classList.remove('hidden');
+      refreshIcons(modal);
     }
 
     function closePinModalToReadOnly() {
@@ -1904,10 +2177,13 @@
       }
 
       const btn = document.getElementById('btn-submit-pin');
+      const btnText = document.getElementById('btn-submit-pin-text');
       btn.disabled = true;
+      if (btnText) btnText.textContent = 'Memeriksa PIN...';
 
       try {
         const res = await ApiClient.request('verifikasiPIN', { pin: AppState.pinBuffer });
+
         if (!res.success) {
           AppState.pinFailedAttempts += 1;
           AppState.pinBuffer = '';
@@ -1934,15 +2210,16 @@
         Utils.toast('success', 'Akses Pengelolaan Terbuka', 'Seluruh fitur edit dan transaksi kini aktif.');
       } finally {
         btn.disabled = false;
+        if (btnText) btnText.textContent = 'Buka Kunci';
       }
     }
 
     async function lockApplicationNow(reason = 'Aplikasi dikunci secara manual.') {
       AppState.isUnlocked = false;
-      await ApiClient.request('kunciAplikasi', { reason });
       updateLockStateUI();
       renderCurrentPage();
       Utils.toast('info', 'Aplikasi Terkunci', 'Akses kembali ke mode lihat saja.');
+      ApiClient.request('kunciAplikasi', { reason }).catch(() => {});
     }
 
     function handleHeaderLockClick() {
@@ -1973,7 +2250,7 @@
         roleBadge.textContent = AppState.isUnlocked ? 'Terbuka (Bisa Edit Data)' : 'Terkunci (Lihat Saja)';
       }
 
-      lucide.createIcons();
+      refreshIcons(btn);
     }
 
     function setupAutoLockListeners() {
@@ -2155,8 +2432,8 @@
       AppState.charts = {};
 
       const db = AppState.db;
+      const fastAnim = { duration: 220 };
 
-      // 1. Pemasukan vs Pengeluaran
       const ctx1 = document.getElementById('chart-income-expense');
       if (ctx1) {
         AppState.charts.incomeExpense = new Chart(ctx1, {
@@ -2170,11 +2447,10 @@
               borderRadius: 8
             }]
           },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+          options: { animation: fastAnim, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
       }
 
-      // 2. Pembayaran 12 Bulan Terakhir
       const ctx2 = document.getElementById('chart-payments-12m');
       if (ctx2) {
         const months = [];
@@ -2202,11 +2478,10 @@
               tension: 0.35
             }]
           },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+          options: { animation: fastAnim, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
       }
 
-      // 3. Pelanggan per Dusun
       const ctx3 = document.getElementById('chart-customers-dusun');
       if (ctx3) {
         const sortedDusun = [...db.dusun].sort((a, b) => a.urutan - b.urutan);
@@ -2221,11 +2496,10 @@
               borderRadius: 6
             }]
           },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+          options: { animation: fastAnim, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
       }
 
-      // 4. Perbandingan Tagihan Lunas & Belum Lunas
       const ctx4 = document.getElementById('chart-bills-status');
       if (ctx4) {
         const lunasCount = db.tagihan.filter(t => t.status === 'Lunas').length;
@@ -2239,14 +2513,14 @@
               backgroundColor: ['#10b981', '#f97316']
             }]
           },
-          options: { responsive: true, maintainAspectRatio: false }
+          options: { animation: fastAnim, responsive: true, maintainAspectRatio: false }
         });
       }
     }
 
     /**
      * =========================================================================
-     * MODULE 8: MANAJEMEN PELANGGAN (INPUT MANUAL DUSUN/RT/RW & HAPUS KONTRAK)
+     * MODULE 8: MANAJEMEN PELANGGAN (PENCARIAN INSTAN & RIWAYAT KLIK DUSUN/RT/RW)
      * =========================================================================
      */
     let pelangganFilter = { search: '', dusun: 'ALL', status: 'ALL' };
@@ -2254,30 +2528,20 @@
     function renderPelanggan(container) {
       const editable = canManage('pelanggan');
       const sortedDusun = [...AppState.db.dusun].sort((a, b) => a.urutan - b.urutan);
-      const q = pelangganFilter.search.toLowerCase();
-
-      const filtered = AppState.db.pelanggan.filter(p => {
-        const matchDusun = pelangganFilter.dusun === 'ALL' || p.id_dusun === pelangganFilter.dusun;
-        const matchStatus = pelangganFilter.status === 'ALL' || p.status === pelangganFilter.status;
-        const dusunName = DataHelpers.getDusunName(p.id_dusun).toLowerCase();
-        const matchQ = !q ||
-          (p.nama_lengkap || '').toLowerCase().includes(q) ||
-          (p.nomor_pelanggan || '').toLowerCase().includes(q) ||
-          (p.nomor_meter || '').toLowerCase().includes(q) ||
-          dusunName.includes(q);
-        return matchDusun && matchStatus && matchQ;
-      });
 
       container.innerHTML = `
         <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
           <div class="flex flex-wrap items-center gap-2">
-            <input type="text" value="${Utils.escapeHtml(pelangganFilter.search)}" oninput="pelangganFilter.search=this.value; renderCurrentPage()"
-              placeholder="Cari nama, no. pelanggan, no. meter..." class="px-3.5 py-2 rounded-xl border border-slate-300 text-xs w-56" />
-            <select onchange="pelangganFilter.dusun=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white">
+            <div class="relative">
+              <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+              <input type="text" value="${Utils.escapeHtml(pelangganFilter.search)}" oninput="pelangganFilter.search=this.value; updatePelangganTableBody()"
+                placeholder="Cari nama, no. pelanggan, meter..." class="pl-8 pr-3.5 py-2 rounded-xl border border-slate-300 text-xs w-60 focus:border-blue-500 focus:outline-none" />
+            </div>
+            <select onchange="pelangganFilter.dusun=this.value; updatePelangganTableBody()" class="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white">
               <option value="ALL">Semua Dusun</option>
               ${sortedDusun.map(d => `<option value="${d.id_dusun}" ${pelangganFilter.dusun === d.id_dusun ? 'selected' : ''}>${Utils.escapeHtml(d.nama_dusun)}</option>`).join('')}
             </select>
-            <select onchange="pelangganFilter.status=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white">
+            <select onchange="pelangganFilter.status=this.value; updatePelangganTableBody()" class="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white">
               <option value="ALL">Semua Status</option>
               <option value="Aktif" ${pelangganFilter.status === 'Aktif' ? 'selected' : ''}>Aktif</option>
               <option value="Nonaktif" ${pelangganFilter.status === 'Nonaktif' ? 'selected' : ''}>Nonaktif</option>
@@ -2318,53 +2582,116 @@
                   ${editable ? '<th class="py-3 px-4 text-right">Aksi</th>' : ''}
                 </tr>
               </thead>
-              <tbody class="divide-y divide-slate-100">
-                ${filtered.length ? filtered.map(p => {
-                  const statusBadge = p.status === 'Aktif'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : p.status === 'Diputus' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-700';
-                  const rtrwText = (p.rt || p.rw) ? `RT ${p.rt || '-'} / RW ${p.rw || '-'}` : '';
-                  return `
-                    <tr class="hover:bg-slate-50">
-                      <td class="py-3 px-4 font-mono font-bold text-blue-700">${Utils.escapeHtml(p.nomor_pelanggan)}</td>
-                      <td class="py-3 px-4">
-                        <p class="font-bold text-slate-800">${Utils.escapeHtml(p.nama_lengkap)}</p>
-                        <p class="text-[11px] text-slate-500">${Utils.escapeHtml(p.alamat || '')}</p>
-                      </td>
-                      <td class="py-3 px-4">
-                        <p class="font-semibold text-slate-800">${Utils.escapeHtml(DataHelpers.getDusunName(p.id_dusun))}</p>
-                        ${rtrwText ? `<p class="text-[11px] text-slate-500">${Utils.escapeHtml(rtrwText)}</p>` : ''}
-                      </td>
-                      <td class="py-3 px-4">
-                        <p class="font-mono font-semibold">${Utils.escapeHtml(p.nomor_meter || '-')}</p>
-                        <p class="text-[11px] text-slate-500">${Utils.escapeHtml(p.golongan)}</p>
-                      </td>
-                      <td class="py-3 px-4 font-mono">${Utils.escapeHtml(p.no_telepon || '-')}</td>
-                      <td class="py-3 px-4"><span class="px-2.5 py-0.5 rounded-full font-bold text-[11px] ${statusBadge}">${p.status}</span></td>
-                      ${editable ? `
-                        <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
-                          <button type="button" onclick="openPelangganModal('${p.id_pelanggan}')" class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">Edit</button>
-                          <button type="button" onclick="deletePelangganAction('${p.id_pelanggan}')" class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold" title="Hapus pelanggan yang keluar / putus kontrak">Hapus</button>
-                        </td>
-                      ` : ''}
-                    </tr>`;
-                }).join('') : `<tr><td colspan="7" class="py-8 text-center text-slate-400">Tidak ada data pelanggan ditemukan.</td></tr>`}
-              </tbody>
+              <tbody id="pelanggan-tbody" class="divide-y divide-slate-100"></tbody>
             </table>
           </div>
         </div>
       `;
+
+      updatePelangganTableBody();
+    }
+
+    function updatePelangganTableBody() {
+      const tbody = document.getElementById('pelanggan-tbody');
+      if (!tbody) return;
+      const editable = canManage('pelanggan');
+      const q = pelangganFilter.search.toLowerCase().trim();
+
+      const filtered = AppState.db.pelanggan
+        .filter(p => {
+          const matchDusun = pelangganFilter.dusun === 'ALL' || p.id_dusun === pelangganFilter.dusun;
+          const matchStatus = pelangganFilter.status === 'ALL' || p.status === pelangganFilter.status;
+          return matchDusun && matchStatus && DataHelpers.matchesPelangganSearch(p, q);
+        })
+        .sort((a, b) => {
+          if (!q) return 0;
+          return DataHelpers.rankSearchScore(a.nama_lengkap, q) - DataHelpers.rankSearchScore(b.nama_lengkap, q);
+        });
+
+      tbody.innerHTML = filtered.length ? filtered.map(p => {
+        const statusBadge = p.status === 'Aktif'
+          ? 'bg-emerald-100 text-emerald-700'
+          : p.status === 'Diputus' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-700';
+        const rtrwText = (p.rt || p.rw) ? `RT ${p.rt || '-'} / RW ${p.rw || '-'}` : '';
+        return `
+          <tr class="hover:bg-slate-50 transition-colors duration-75">
+            <td class="py-3 px-4 font-mono font-bold text-blue-700">${Utils.escapeHtml(p.nomor_pelanggan)}</td>
+            <td class="py-3 px-4">
+              <p class="font-bold text-slate-800">${Utils.escapeHtml(p.nama_lengkap)}</p>
+              <p class="text-[11px] text-slate-500">${Utils.escapeHtml(p.alamat || '')}</p>
+            </td>
+            <td class="py-3 px-4">
+              <p class="font-semibold text-slate-800">${Utils.escapeHtml(DataHelpers.getDusunName(p.id_dusun))}</p>
+              ${rtrwText ? `<p class="text-[11px] text-slate-500">${Utils.escapeHtml(rtrwText)}</p>` : ''}
+            </td>
+            <td class="py-3 px-4">
+              <p class="font-mono font-semibold">${Utils.escapeHtml(p.nomor_meter || '-')}</p>
+              <p class="text-[11px] text-slate-500">${Utils.escapeHtml(p.golongan)}</p>
+            </td>
+            <td class="py-3 px-4 font-mono">${Utils.escapeHtml(p.no_telepon || '-')}</td>
+            <td class="py-3 px-4"><span class="px-2.5 py-0.5 rounded-full font-bold text-[11px] ${statusBadge}">${p.status}</span></td>
+            ${editable ? `
+              <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+                <button type="button" onclick="openPelangganModal('${p.id_pelanggan}')" class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">Edit</button>
+                <button type="button" onclick="deletePelangganAction('${p.id_pelanggan}')" class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold" title="Hapus pelanggan yang keluar / putus kontrak">Hapus</button>
+              </td>
+            ` : ''}
+          </tr>`;
+      }).join('') : `<tr><td colspan="7" class="py-8 text-center text-slate-400">Tidak ada data pelanggan ditemukan.</td></tr>`;
+    }
+
+    function applyHistoryChipValue(inputId, value) {
+      const inp = document.getElementById(inputId);
+      if (!inp) return;
+      inp.value = value;
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     function openPelangganModal(id_pelanggan = null) {
       if (!requireUnlockedAction('pelanggan')) return;
       const p = id_pelanggan ? DataHelpers.getPelangganById(id_pelanggan) : null;
-      const sortedDusun = [...AppState.db.dusun].sort((a, b) => a.urutan - b.urutan);
       const currentDusunName = p ? DataHelpers.getDusunName(p.id_dusun) : '';
       const nextNum = `KLK-${String(AppState.db.pelanggan.length + 1).padStart(3, '0')}`;
+      const historyOpts = InputHistory.getOptions();
+
+      const dusunChipsHtml = historyOpts.dusun.length ? `
+        <div class="mt-1.5 flex flex-wrap items-center gap-1">
+          <span class="text-[10px] text-slate-400 font-semibold">Riwayat Dusun:</span>
+          ${historyOpts.dusun.map(dName => `
+            <button type="button" onclick="applyHistoryChipValue('plg-dusun-manual', '${Utils.escapeHtml(dName).replace(/'/g, "\\'")}')"
+              class="px-2 py-0.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 text-[11px] font-bold transition">
+              ${Utils.escapeHtml(dName)}
+            </button>
+          `).join('')}
+        </div>
+      ` : '';
+
+      const rtChipsHtml = historyOpts.rt.length ? `
+        <div class="mt-1.5 flex flex-wrap items-center gap-1">
+          <span class="text-[10px] text-slate-400 font-semibold">RT:</span>
+          ${historyOpts.rt.map(rtVal => `
+            <button type="button" onclick="applyHistoryChipValue('plg-rt', '${Utils.escapeHtml(rtVal).replace(/'/g, "\\'")}')"
+              class="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-blue-600 text-slate-700 hover:text-white border border-slate-200 font-mono text-[11px] font-bold transition">
+              ${Utils.escapeHtml(rtVal)}
+            </button>
+          `).join('')}
+        </div>
+      ` : '';
+
+      const rwChipsHtml = historyOpts.rw.length ? `
+        <div class="mt-1.5 flex flex-wrap items-center gap-1">
+          <span class="text-[10px] text-slate-400 font-semibold">RW:</span>
+          ${historyOpts.rw.map(rwVal => `
+            <button type="button" onclick="applyHistoryChipValue('plg-rw', '${Utils.escapeHtml(rwVal).replace(/'/g, "\\'")}')"
+              class="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-blue-600 text-slate-700 hover:text-white border border-slate-200 font-mono text-[11px] font-bold transition">
+              ${Utils.escapeHtml(rwVal)}
+            </button>
+          `).join('')}
+        </div>
+      ` : '';
 
       openAppModal(p ? 'Edit Data Pelanggan' : 'Tambah Pelanggan Baru', `
-        <form id="form-pelanggan" class="space-y-4 text-xs">
+        <form id="form-pelanggan" class="space-y-4 text-xs" autocomplete="off">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block font-bold text-slate-600 mb-1">Nomor Pelanggan *</label>
@@ -2375,21 +2702,22 @@
               <input type="text" id="plg-nama" required value="${Utils.escapeHtml(p?.nama_lengkap || '')}" placeholder="Nama kepala keluarga / pelanggan" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-bold" />
             </div>
             <div>
-              <label class="block font-bold text-slate-600 mb-1">Nama Dusun (Ketik Manual / Pilih) *</label>
-              <input type="text" id="plg-dusun-manual" list="dusun-datalist" required value="${Utils.escapeHtml(currentDusunName === 'Dusun Tidak Diketahui' ? '' : currentDusunName)}"
-                placeholder="Ketik nama dusun..." class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-semibold" />
-              <datalist id="dusun-datalist">
-                ${sortedDusun.map(d => `<option value="${Utils.escapeHtml(d.nama_dusun)}"></option>`).join('')}
-              </datalist>
+              <label class="block font-bold text-slate-600 mb-1">Nama Dusun *</label>
+              <input type="text" id="plg-dusun-manual" name="manual_dusun_field" autocomplete="off" required
+                value="${Utils.escapeHtml(currentDusunName === 'Dusun Tidak Diketahui' ? '' : currentDusunName)}"
+                placeholder="Ketik baru atau klik riwayat di bawah..." class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-semibold" />
+              ${dusunChipsHtml}
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="block font-bold text-slate-600 mb-1">RT</label>
-                <input type="text" id="plg-rt" value="${Utils.escapeHtml(p?.rt || '')}" placeholder="Contoh: 01" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono" />
+                <input type="text" id="plg-rt" autocomplete="off" value="${Utils.escapeHtml(p?.rt || '')}" placeholder="01" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono" />
+                ${rtChipsHtml}
               </div>
               <div>
                 <label class="block font-bold text-slate-600 mb-1">RW</label>
-                <input type="text" id="plg-rw" value="${Utils.escapeHtml(p?.rw || '')}" placeholder="Contoh: 02" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono" />
+                <input type="text" id="plg-rw" autocomplete="off" value="${Utils.escapeHtml(p?.rw || '')}" placeholder="02" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono" />
+                ${rwChipsHtml}
               </div>
             </div>
             <div>
@@ -2437,14 +2765,18 @@
 
       document.getElementById('form-pelanggan').addEventListener('submit', async (e) => {
         e.preventDefault();
+        const manualDusun = document.getElementById('plg-dusun-manual').value.trim();
+        const rtVal = document.getElementById('plg-rt').value.trim();
+        const rwVal = document.getElementById('plg-rw').value.trim();
+
         const res = await ApiClient.request('savePelanggan', {
           item: {
             id_pelanggan: p?.id_pelanggan || null,
             nomor_pelanggan: document.getElementById('plg-no').value.trim(),
             nama_lengkap: document.getElementById('plg-nama').value.trim(),
-            nama_dusun_manual: document.getElementById('plg-dusun-manual').value.trim(),
-            rt: document.getElementById('plg-rt').value.trim(),
-            rw: document.getElementById('plg-rw').value.trim(),
+            nama_dusun_manual: manualDusun,
+            rt: rtVal,
+            rw: rwVal,
             alamat: document.getElementById('plg-alamat').value.trim(),
             no_telepon: document.getElementById('plg-telp').value.trim(),
             nomor_meter: document.getElementById('plg-meter').value.trim(),
@@ -2563,10 +2895,10 @@
 
     /**
      * =========================================================================
-     * MODULE 9: PENCATATAN METER AIR (PERHITUNGAN TAGIHAN & BEBAN OTOMATIS)
+     * MODULE 9: PENCATATAN METER AIR (FILTER, PENCARIAN NAMA & KALKULASI OTOMATIS)
      * =========================================================================
      */
-    let meterState = { periode: Utils.currentPeriode(), dusun: 'ALL', filterBelum: false };
+    let meterState = { periode: Utils.currentPeriode(), dusun: 'ALL', filterBelum: false, search: '' };
 
     function getPreviousMeterForCustomer(id_pelanggan, targetPeriode) {
       const currentRec = AppState.db.meterAir.find(m => m.id_pelanggan === id_pelanggan && m.periode === targetPeriode);
@@ -2589,41 +2921,38 @@
     function renderMeter(container) {
       const editable = canManage('meter');
       const sortedDusun = [...AppState.db.dusun].sort((a, b) => a.urutan - b.urutan);
-      const activePelanggan = AppState.db.pelanggan.filter(p => {
-        if (p.status !== 'Aktif') return false;
-        if (meterState.dusun !== 'ALL' && p.id_dusun !== meterState.dusun) return false;
-        const rec = AppState.db.meterAir.find(m => m.id_pelanggan === p.id_pelanggan && m.periode === meterState.periode);
-        if (meterState.filterBelum && rec) return false;
-        return true;
-      });
-
-      const recordedCount = activePelanggan.filter(p =>
-        AppState.db.meterAir.some(m => m.id_pelanggan === p.id_pelanggan && m.periode === meterState.periode)
-      ).length;
 
       container.innerHTML = `
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
-          <div class="flex flex-wrap items-center gap-2 text-xs">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-end justify-between gap-3">
+          <div class="flex flex-wrap items-end gap-2.5 text-xs">
             <div>
-              <label class="block text-[10px] font-bold text-slate-500 uppercase">Periode Bulan</label>
-              <input type="month" value="${meterState.periode}" onchange="meterState.periode=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300 font-bold" />
+              <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cari Pelanggan</label>
+              <div class="relative">
+                <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <input type="text" value="${Utils.escapeHtml(meterState.search)}" oninput="meterState.search=this.value; updateMeterTableBody()"
+                  placeholder="Nama, no. plg, no. meter..." class="pl-8 pr-3.5 py-2 rounded-xl border border-slate-300 text-xs w-56 focus:border-blue-500 focus:outline-none" />
+              </div>
             </div>
             <div>
-              <label class="block text-[10px] font-bold text-slate-500 uppercase">Filter Dusun</label>
-              <select onchange="meterState.dusun=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white">
+              <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Periode Bulan</label>
+              <input type="month" value="${meterState.periode}" onchange="meterState.periode=this.value; updateMeterTableBody()" class="px-3 py-2 rounded-xl border border-slate-300 font-bold" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Filter Dusun</label>
+              <select onchange="meterState.dusun=this.value; updateMeterTableBody()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white">
                 <option value="ALL">Semua Dusun</option>
                 ${sortedDusun.map(d => `<option value="${d.id_dusun}" ${meterState.dusun === d.id_dusun ? 'selected' : ''}>${Utils.escapeHtml(d.nama_dusun)}</option>`).join('')}
               </select>
             </div>
-            <label class="flex items-center gap-2 pt-4 cursor-pointer font-semibold text-slate-700">
-              <input type="checkbox" ${meterState.filterBelum ? 'checked' : ''} onchange="meterState.filterBelum=this.checked; renderCurrentPage()" class="rounded text-blue-600" />
+            <label class="flex items-center gap-2 pb-2 cursor-pointer font-semibold text-slate-700">
+              <input type="checkbox" ${meterState.filterBelum ? 'checked' : ''} onchange="meterState.filterBelum=this.checked; updateMeterTableBody()" class="rounded text-blue-600" />
               <span>Hanya yang belum dicatat</span>
             </label>
           </div>
 
           <div class="flex flex-wrap items-center gap-2 text-xs">
-            <span class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 font-bold border border-blue-200">
-              Tercatat: ${recordedCount} / ${activePelanggan.length}
+            <span id="meter-recorded-badge" class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 font-bold border border-blue-200">
+              Tercatat: 0 / 0
             </span>
             ${editable ? `
               <button type="button" onclick="saveMassMeterReadings()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-sm">
@@ -2646,50 +2975,79 @@
                   ${editable ? '<th class="py-3 px-4 text-right">Aksi</th>' : ''}
                 </tr>
               </thead>
-              <tbody class="divide-y divide-slate-100">
-                ${activePelanggan.length ? activePelanggan.map(p => {
-                  const rec = AppState.db.meterAir.find(m => m.id_pelanggan === p.id_pelanggan && m.periode === meterState.periode);
-                  const mPrev = rec ? Number(rec.meter_sebelumnya) : getPreviousMeterForCustomer(p.id_pelanggan, meterState.periode);
-                  const mCurr = rec ? Number(rec.meter_sekarang) : '';
-                  const usage = rec ? Number(rec.pemakaian) : 0;
-                  const est = calculateAutoBillPreview(p, usage);
-
-                  return `
-                    <tr class="hover:bg-slate-50">
-                      <td class="py-3 px-4">
-                        <p class="font-bold text-slate-800">${Utils.escapeHtml(p.nama_lengkap)}</p>
-                        <p class="font-mono text-[11px] text-slate-500">${p.nomor_pelanggan} • ${p.golongan}</p>
-                      </td>
-                      <td class="py-3 px-4">${Utils.escapeHtml(DataHelpers.getDusunName(p.id_dusun))}</td>
-                      <td class="py-3 px-4 text-right">
-                        <input type="number" id="mprev-${p.id_pelanggan}" value="${mPrev}" ${!editable ? 'readonly' : ''}
-                          oninput="onMeterInputChange('${p.id_pelanggan}')"
-                          class="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 text-right font-mono font-bold bg-slate-50" />
-                      </td>
-                      <td class="py-3 px-4 text-right">
-                        <input type="number" id="mcurr-${p.id_pelanggan}" data-plg-id="${p.id_pelanggan}" value="${mCurr}" ${!editable ? 'readonly' : ''}
-                          placeholder="Isi..." oninput="onMeterInputChange('${p.id_pelanggan}')"
-                          class="meter-mass-input w-28 px-2.5 py-1.5 rounded-lg border border-blue-300 text-right font-mono font-extrabold text-blue-800 focus:ring-2 focus:ring-blue-500" />
-                      </td>
-                      <td class="py-3 px-4 text-right" id="mcalc-${p.id_pelanggan}">
-                        ${rec ? `
-                          <p class="font-extrabold text-slate-800">${usage} m³</p>
-                          <p class="text-[11px] font-bold text-emerald-700">Tagihan: ${Utils.formatRupiah(est.total)} <span class="text-slate-400 font-normal">(Beban ${Utils.formatRupiah(est.beban)})</span></p>
-                        ` : `<span class="text-slate-400 italic">Belum dicatat</span>`}
-                      </td>
-                      ${editable ? `
-                        <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
-                          <button type="button" onclick="saveSingleMeterReading('${p.id_pelanggan}')" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold">Simpan</button>
-                          <button type="button" onclick="openKoreksiMeterModal('${p.id_pelanggan}')" class="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold" title="Koreksi Resmi Meter">Koreksi</button>
-                        </td>
-                      ` : ''}
-                    </tr>`;
-                }).join('') : `<tr><td colspan="6" class="py-8 text-center text-slate-400">Tidak ada pelanggan aktif pada filter ini.</td></tr>`}
-              </tbody>
+              <tbody id="meter-tbody" class="divide-y divide-slate-100"></tbody>
             </table>
           </div>
         </div>
       `;
+
+      updateMeterTableBody();
+    }
+
+    function updateMeterTableBody() {
+      const tbody = document.getElementById('meter-tbody');
+      if (!tbody) return;
+      const editable = canManage('meter');
+      const q = meterState.search.toLowerCase().trim();
+
+      const activePelanggan = AppState.db.pelanggan
+        .filter(p => {
+          if (p.status !== 'Aktif') return false;
+          if (meterState.dusun !== 'ALL' && p.id_dusun !== meterState.dusun) return false;
+          const rec = AppState.db.meterAir.find(m => m.id_pelanggan === p.id_pelanggan && m.periode === meterState.periode);
+          if (meterState.filterBelum && rec) return false;
+          return DataHelpers.matchesPelangganSearch(p, q);
+        })
+        .sort((a, b) => {
+          if (!q) return 0;
+          return DataHelpers.rankSearchScore(a.nama_lengkap, q) - DataHelpers.rankSearchScore(b.nama_lengkap, q);
+        });
+
+      const recordedCount = activePelanggan.filter(p =>
+        AppState.db.meterAir.some(m => m.id_pelanggan === p.id_pelanggan && m.periode === meterState.periode)
+      ).length;
+
+      const badge = document.getElementById('meter-recorded-badge');
+      if (badge) badge.textContent = `Tercatat: ${recordedCount} / ${activePelanggan.length}`;
+
+      tbody.innerHTML = activePelanggan.length ? activePelanggan.map(p => {
+        const rec = AppState.db.meterAir.find(m => m.id_pelanggan === p.id_pelanggan && m.periode === meterState.periode);
+        const mPrev = rec ? Number(rec.meter_sebelumnya) : getPreviousMeterForCustomer(p.id_pelanggan, meterState.periode);
+        const mCurr = rec ? Number(rec.meter_sekarang) : '';
+        const usage = rec ? Number(rec.pemakaian) : 0;
+        const est = calculateAutoBillPreview(p, usage);
+
+        return `
+          <tr class="hover:bg-slate-50 transition-colors duration-75">
+            <td class="py-3 px-4">
+              <p class="font-bold text-slate-800">${Utils.escapeHtml(p.nama_lengkap)}</p>
+              <p class="font-mono text-[11px] text-slate-500">${p.nomor_pelanggan} • ${p.golongan}</p>
+            </td>
+            <td class="py-3 px-4">${Utils.escapeHtml(DataHelpers.getDusunName(p.id_dusun))}</td>
+            <td class="py-3 px-4 text-right">
+              <input type="number" id="mprev-${p.id_pelanggan}" value="${mPrev}" ${!editable ? 'readonly' : ''}
+                oninput="onMeterInputChange('${p.id_pelanggan}')"
+                class="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 text-right font-mono font-bold bg-slate-50" />
+            </td>
+            <td class="py-3 px-4 text-right">
+              <input type="number" id="mcurr-${p.id_pelanggan}" data-plg-id="${p.id_pelanggan}" value="${mCurr}" ${!editable ? 'readonly' : ''}
+                placeholder="Isi..." oninput="onMeterInputChange('${p.id_pelanggan}')"
+                class="meter-mass-input w-28 px-2.5 py-1.5 rounded-lg border border-blue-300 text-right font-mono font-extrabold text-blue-800 focus:ring-2 focus:ring-blue-500" />
+            </td>
+            <td class="py-3 px-4 text-right" id="mcalc-${p.id_pelanggan}">
+              ${rec ? `
+                <p class="font-extrabold text-slate-800">${usage} m³</p>
+                <p class="text-[11px] font-bold text-emerald-700">Tagihan: ${Utils.formatRupiah(est.total)} <span class="text-slate-400 font-normal">(Beban ${Utils.formatRupiah(est.beban)})</span></p>
+              ` : `<span class="text-slate-400 italic">Belum dicatat</span>`}
+            </td>
+            ${editable ? `
+              <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+                <button type="button" onclick="saveSingleMeterReading('${p.id_pelanggan}')" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold">Simpan</button>
+                <button type="button" onclick="openKoreksiMeterModal('${p.id_pelanggan}')" class="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold" title="Koreksi Resmi Meter">Koreksi</button>
+              </td>
+            ` : ''}
+          </tr>`;
+      }).join('') : `<tr><td colspan="6" class="py-8 text-center text-slate-400">Tidak ada pelanggan ditemukan pada filter ini.</td></tr>`;
     }
 
     function onMeterInputChange(id_pelanggan) {
@@ -2741,7 +3099,7 @@
         Swal.fire('Validasi Meter', res.message, 'warning');
         return;
       }
-      renderCurrentPage();
+      updateMeterTableBody();
       Utils.toast('success', 'Meter & Tagihan Otomatis Tersimpan');
     }
 
@@ -2776,7 +3134,7 @@
         Swal.fire('Gagal', res.message, 'error');
         return;
       }
-      renderCurrentPage();
+      updateMeterTableBody();
       Utils.toast('success', `${records.length} Pencatatan Meter & Tagihan Tersimpan`);
     }
 
@@ -2823,7 +3181,7 @@
           }]
         });
         closeAppModal();
-        renderCurrentPage();
+        updateMeterTableBody();
         Utils.toast('success', 'Koreksi Meter Berhasil Disimpan');
       });
     }
@@ -2833,20 +3191,12 @@
      * MODULE 10: PENGATURAN HARGA PER METER, NOMINAL BEBAN & TAGIHAN BULANAN
      * =========================================================================
      */
-    let tagihanFilter = { periode: 'ALL', dusun: 'ALL', status: 'ALL' };
+    let tagihanFilter = { periode: 'ALL', dusun: 'ALL', status: 'ALL', search: '' };
 
     function renderTagihan(container) {
       const editable = canManage('tagihan');
       const sortedDusun = [...AppState.db.dusun].sort((a, b) => a.urutan - b.urutan);
       const tarifs = AppState.db.tarif;
-
-      const filteredBills = AppState.db.tagihan.filter(t => {
-        const plg = DataHelpers.getPelangganById(t.id_pelanggan);
-        const matchP = tagihanFilter.periode === 'ALL' || !tagihanFilter.periode || t.periode === tagihanFilter.periode;
-        const matchD = tagihanFilter.dusun === 'ALL' || plg?.id_dusun === tagihanFilter.dusun;
-        const matchS = tagihanFilter.status === 'ALL' || t.status === tagihanFilter.status;
-        return matchP && matchD && matchS;
-      }).sort((a, b) => b.periode.localeCompare(a.periode));
 
       container.innerHTML = `
         <!-- Pengaturan Harga per Meter & Nominal Beban -->
@@ -2892,18 +3242,23 @@
           </div>
         </div>
 
-        <!-- Filter & Generate Tagihan Massal -->
+        <!-- Filter, Pencarian Nama & Generate Tagihan Massal -->
         <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
           <div class="flex flex-wrap items-center gap-2">
-            <select onchange="tagihanFilter.periode=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white font-bold">
+            <div class="relative">
+              <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+              <input type="text" value="${Utils.escapeHtml(tagihanFilter.search)}" oninput="tagihanFilter.search=this.value; updateTagihanTableBody()"
+                placeholder="Cari nama, no. pelanggan, dusun..." class="pl-8 pr-3.5 py-2 rounded-xl border border-slate-300 text-xs w-56 focus:border-blue-500 focus:outline-none" />
+            </div>
+            <select onchange="tagihanFilter.periode=this.value; updateTagihanTableBody()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white font-bold">
               <option value="ALL">Semua Periode</option>
               ${[...new Set(AppState.db.tagihan.map(t => t.periode))].sort().reverse().map(ym => `<option value="${ym}" ${tagihanFilter.periode === ym ? 'selected' : ''}>${Utils.formatPeriode(ym)}</option>`).join('')}
             </select>
-            <select onchange="tagihanFilter.dusun=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white">
+            <select onchange="tagihanFilter.dusun=this.value; updateTagihanTableBody()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white">
               <option value="ALL">Semua Dusun</option>
               ${sortedDusun.map(d => `<option value="${d.id_dusun}" ${tagihanFilter.dusun === d.id_dusun ? 'selected' : ''}>${Utils.escapeHtml(d.nama_dusun)}</option>`).join('')}
             </select>
-            <select onchange="tagihanFilter.status=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white">
+            <select onchange="tagihanFilter.status=this.value; updateTagihanTableBody()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white">
               <option value="ALL">Semua Status</option>
               <option value="Belum Dibayar" ${tagihanFilter.status === 'Belum Dibayar' ? 'selected' : ''}>Belum Dibayar</option>
               <option value="Dibayar Sebagian" ${tagihanFilter.status === 'Dibayar Sebagian' ? 'selected' : ''}>Dibayar Sebagian</option>
@@ -2935,44 +3290,71 @@
                   <th class="py-3 px-4 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-slate-100">
-                ${filteredBills.length ? filteredBills.map(t => {
-                  const plg = DataHelpers.getPelangganById(t.id_pelanggan);
-                  const bebanNom = Number(t.nominal_beban ?? t.tarif_snapshot?.nominal_beban ?? 0);
-                  let badge = 'bg-orange-100 text-orange-700';
-                  if (t.status === 'Lunas') badge = 'bg-emerald-100 text-emerald-700';
-                  else if (t.status === 'Terlambat') badge = 'bg-rose-100 text-rose-700';
-                  else if (t.status === 'Dibatalkan') badge = 'bg-slate-200 text-slate-600';
-
-                  return `
-                    <tr class="hover:bg-slate-50">
-                      <td class="py-3 px-4">
-                        <p class="font-bold text-slate-800">${Utils.escapeHtml(plg?.nama_lengkap || t.id_pelanggan)}</p>
-                        <p class="text-[11px] text-slate-500">${plg?.nomor_pelanggan || '-'} • ${Utils.escapeHtml(DataHelpers.getDusunName(plg?.id_dusun))}</p>
-                      </td>
-                      <td class="py-3 px-4 font-semibold">${Utils.formatPeriode(t.periode)}</td>
-                      <td class="py-3 px-4 text-right font-mono font-bold">${t.pemakaian} m³</td>
-                      <td class="py-3 px-4 text-right text-[11px] text-slate-600">
-                        Air: ${Utils.formatRupiah(t.subtotal_air)}<br>
-                        Beban: ${Utils.formatRupiah(bebanNom)}${Number(t.denda) > 0 ? `<br><span class="text-rose-600">Denda: ${Utils.formatRupiah(t.denda)}</span>` : ''}
-                      </td>
-                      <td class="py-3 px-4 text-right font-extrabold text-slate-900">${Utils.formatRupiah(t.total_tagihan)}</td>
-                      <td class="py-3 px-4"><span class="px-2.5 py-0.5 rounded-full font-bold text-[11px] ${badge}">${t.status}</span></td>
-                      <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
-                        ${t.status !== 'Lunas' && t.status !== 'Dibatalkan' ? `
-                          <button type="button" onclick="selectedPaymentCustomerId='${t.id_pelanggan}'; navigateTo('pembayaran')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Bayar</button>
-                        ` : ''}
-                        ${editable && t.status !== 'Dibatalkan' && Number(t.jumlah_dibayar) === 0 ? `
-                          <button type="button" onclick="batalkanTagihanAction('${t.id_tagihan}')" class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold">Batal</button>
-                        ` : ''}
-                      </td>
-                    </tr>`;
-                }).join('') : `<tr><td colspan="7" class="py-8 text-center text-slate-400">Belum ada data tagihan.</td></tr>`}
-              </tbody>
+              <tbody id="tagihan-tbody" class="divide-y divide-slate-100"></tbody>
             </table>
           </div>
         </div>
       `;
+
+      updateTagihanTableBody();
+    }
+
+    function updateTagihanTableBody() {
+      const tbody = document.getElementById('tagihan-tbody');
+      if (!tbody) return;
+      const editable = canManage('tagihan');
+      const q = tagihanFilter.search.toLowerCase().trim();
+
+      const filteredBills = AppState.db.tagihan
+        .filter(t => {
+          const plg = DataHelpers.getPelangganById(t.id_pelanggan);
+          const matchP = tagihanFilter.periode === 'ALL' || !tagihanFilter.periode || t.periode === tagihanFilter.periode;
+          const matchD = tagihanFilter.dusun === 'ALL' || plg?.id_dusun === tagihanFilter.dusun;
+          const matchS = tagihanFilter.status === 'ALL' || t.status === tagihanFilter.status;
+          return matchP && matchD && matchS && DataHelpers.matchesPelangganSearch(plg, q);
+        })
+        .sort((a, b) => {
+          if (q) {
+            const pA = DataHelpers.getPelangganById(a.id_pelanggan);
+            const pB = DataHelpers.getPelangganById(b.id_pelanggan);
+            const diff = DataHelpers.rankSearchScore(pA?.nama_lengkap, q) - DataHelpers.rankSearchScore(pB?.nama_lengkap, q);
+            if (diff !== 0) return diff;
+          }
+          return String(b.periode ?? '').localeCompare(String(a.periode ?? ''));
+        });
+
+      tbody.innerHTML = filteredBills.length ? filteredBills.map(t => {
+        const plg = DataHelpers.getPelangganById(t.id_pelanggan);
+        const bebanNom = Number(t.nominal_beban ?? t.tarif_snapshot?.nominal_beban ?? 0);
+        let badge = 'bg-orange-100 text-orange-700';
+        if (t.status === 'Lunas') badge = 'bg-emerald-100 text-emerald-700';
+        else if (t.status === 'Terlambat') badge = 'bg-rose-100 text-rose-700';
+        else if (t.status === 'Dibatalkan') badge = 'bg-slate-200 text-slate-600';
+
+        return `
+          <tr class="hover:bg-slate-50 transition-colors duration-75">
+            <td class="py-3 px-4">
+              <p class="font-bold text-slate-800">${Utils.escapeHtml(plg?.nama_lengkap || t.id_pelanggan)}</p>
+              <p class="text-[11px] text-slate-500">${plg?.nomor_pelanggan || '-'} • ${Utils.escapeHtml(DataHelpers.getDusunName(plg?.id_dusun))}</p>
+            </td>
+            <td class="py-3 px-4 font-semibold">${Utils.formatPeriode(t.periode)}</td>
+            <td class="py-3 px-4 text-right font-mono font-bold">${t.pemakaian} m³</td>
+            <td class="py-3 px-4 text-right text-[11px] text-slate-600">
+              Air: ${Utils.formatRupiah(t.subtotal_air)}<br>
+              Beban: ${Utils.formatRupiah(bebanNom)}${Number(t.denda) > 0 ? `<br><span class="text-rose-600">Denda: ${Utils.formatRupiah(t.denda)}</span>` : ''}
+            </td>
+            <td class="py-3 px-4 text-right font-extrabold text-slate-900">${Utils.formatRupiah(t.total_tagihan)}</td>
+            <td class="py-3 px-4"><span class="px-2.5 py-0.5 rounded-full font-bold text-[11px] ${badge}">${t.status}</span></td>
+            <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+              ${t.status !== 'Lunas' && t.status !== 'Dibatalkan' ? `
+                <button type="button" onclick="selectedPaymentCustomerId='${t.id_pelanggan}'; navigateTo('pembayaran')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Bayar</button>
+              ` : ''}
+              ${editable && t.status !== 'Dibatalkan' && Number(t.jumlah_dibayar) === 0 ? `
+                <button type="button" onclick="batalkanTagihanAction('${t.id_tagihan}')" class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold">Batal</button>
+              ` : ''}
+            </td>
+          </tr>`;
+      }).join('') : `<tr><td colspan="7" class="py-8 text-center text-slate-400">Tidak ada data tagihan sesuai filter.</td></tr>`;
     }
 
     function openTarifModal() {
@@ -3054,7 +3436,7 @@
           id_dusun: document.getElementById('gen-dusun').value
         });
         closeAppModal();
-        renderCurrentPage();
+        updateTagihanTableBody();
         Swal.fire('Selesai', `Berhasil membuat ${res.createdCount} tagihan baru (${res.skippedCount} dilewati).`, 'success');
       });
     }
@@ -3072,31 +3454,210 @@
       });
       if (!alasan) return;
       await ApiClient.request('batalkanTagihan', { id_tagihan, alasan });
-      renderCurrentPage();
+      updateTagihanTableBody();
       Utils.toast('info', 'Tagihan Dibatalkan');
     }
 
     /**
      * =========================================================================
-     * MODULE 11: PENCATATAN PEMBAYARAN & STRUK WATERMARK KALIKURMO
+     * MODULE 11: PENCATATAN PEMBAYARAN (PENCARIAN INSTAN & STRUK WATERMARK)
      * =========================================================================
      */
     let selectedPaymentCustomerId = '';
+    let paymentCustomerSearch = '';
 
-    function renderPembayaran(container) {
+    function buildPaymentCustomerPanelHtml() {
       const editable = canManage('pembayaran');
-      const customers = AppState.db.pelanggan;
-      if (!selectedPaymentCustomerId && customers.length > 0) {
-        const withUnpaid = AppState.db.tagihan.find(t => t.status !== 'Lunas' && t.status !== 'Dibatalkan');
-        selectedPaymentCustomerId = withUnpaid ? withUnpaid.id_pelanggan : customers[0].id_pelanggan;
-      }
-
       const selectedPlg = DataHelpers.getPelangganById(selectedPaymentCustomerId);
       const unpaidBills = AppState.db.tagihan
         .filter(t => t.id_pelanggan === selectedPaymentCustomerId && t.status !== 'Lunas' && t.status !== 'Dibatalkan')
         .sort((a, b) => a.periode.localeCompare(b.periode));
-
       const totalUnpaid = unpaidBills.reduce((s, b) => s + Number(b.sisa_tagihan), 0);
+
+      if (!selectedPlg) {
+        return `<div class="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500 text-center">Pelanggan tidak ditemukan.</div>`;
+      }
+
+      return `
+        <div class="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 space-y-1">
+          <p class="font-extrabold text-blue-900">${Utils.escapeHtml(selectedPlg.nama_lengkap)} (${selectedPlg.nomor_pelanggan})</p>
+          <p class="text-[11px] text-blue-800">${Utils.escapeHtml(DataHelpers.getDusunName(selectedPlg.id_dusun))} • Golongan: ${Utils.escapeHtml(selectedPlg.golongan)}</p>
+          <p class="text-xs font-extrabold text-rose-600 pt-1">Total Tagihan Belum Lunas: ${Utils.formatRupiah(totalUnpaid)}</p>
+        </div>
+
+        ${unpaidBills.length > 0 ? `
+          <form id="form-pembayaran" onsubmit="handlePembayaranFormSubmit(event)" class="space-y-3 pt-2">
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">Pilih Tagihan yang Dibayar:</label>
+              <div class="space-y-1.5 max-h-44 overflow-y-auto border border-slate-200 rounded-xl p-2.5 bg-slate-50">
+                ${unpaidBills.map(b => {
+                  const bebanNom = Number(b.nominal_beban ?? b.tarif_snapshot?.nominal_beban ?? 0);
+                  return `
+                    <label class="flex items-center justify-between gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer">
+                      <div class="flex items-center gap-2">
+                        <input type="checkbox" class="pay-bill-chk rounded text-emerald-600" value="${b.id_tagihan}" data-sisa="${b.sisa_tagihan}" checked onchange="recalcSelectedPaymentAmount()" />
+                        <div>
+                          <p class="font-bold text-slate-800">${Utils.formatPeriode(b.periode)} (${b.pemakaian} m³)</p>
+                          <p class="text-[10px] text-slate-500">Air ${Utils.formatRupiah(b.subtotal_air)} + Beban ${Utils.formatRupiah(bebanNom)}</p>
+                        </div>
+                      </div>
+                      <span class="font-extrabold text-slate-900">${Utils.formatRupiah(b.sisa_tagihan)}</span>
+                    </label>`;
+                }).join('')}
+              </div>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">Jumlah Pembayaran (Rp) *</label>
+              <input type="number" id="pay-amount" required min="1" value="${totalUnpaid}" ${!editable ? 'readonly' : ''}
+                class="w-full px-3.5 py-2.5 rounded-xl border border-emerald-400 font-mono font-extrabold text-base text-emerald-800 bg-emerald-50/40" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block font-bold text-slate-600 mb-1">Metode Bayar</label>
+                <select id="pay-metode" ${!editable ? 'disabled' : ''} class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white">
+                  <option value="Tunai">Tunai</option>
+                  <option value="Transfer Bank">Transfer Bank</option>
+                  <option value="Metode Lainnya">Metode Lainnya</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-600 mb-1">Jenis Pembayaran</label>
+                <select id="pay-jenis" ${!editable ? 'disabled' : ''} class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white">
+                  <option value="Pembayaran Penuh">Pembayaran Penuh</option>
+                  <option value="Pembayaran Sebagian">Pembayaran Sebagian</option>
+                  <option value="Pembayaran Beberapa Bulan">Beberapa Bulan</option>
+                  <option value="Pembayaran Tunggakan">Pembayaran Tunggakan</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">Keterangan</label>
+              <input type="text" id="pay-ket" ${!editable ? 'readonly' : ''} placeholder="Catatan pembayaran..." class="w-full px-3 py-2 rounded-xl border border-slate-300" />
+            </div>
+
+            ${editable ? `
+              <button type="submit" id="btn-submit-pembayaran" class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2">
+                <i data-lucide="check-circle" class="w-4 h-4"></i>
+                <span id="btn-submit-pembayaran-text">Proses &amp; Tampilkan Struk</span>
+              </button>
+            ` : `
+              <button type="button" onclick="openPinUnlockModal()" class="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs">
+                Buka PIN untuk Mencatat Pembayaran
+              </button>
+            `}
+          </form>
+        ` : `
+          <div class="p-6 rounded-xl bg-emerald-50 border border-emerald-200 text-center text-xs text-emerald-800 font-bold mt-2">
+            Pelanggan ini tidak memiliki tagihan tertunggak (Lunas).
+          </div>
+        `}
+      `;
+    }
+
+    function onPaymentCustomerSearchInput(val) {
+      paymentCustomerSearch = val;
+      const q = val.toLowerCase().trim();
+      const matched = AppState.db.pelanggan
+        .filter(p => DataHelpers.matchesPelangganSearch(p, q))
+        .sort((a, b) => {
+          if (!q) return 0;
+          return DataHelpers.rankSearchScore(a.nama_lengkap, q) - DataHelpers.rankSearchScore(b.nama_lengkap, q);
+        });
+
+      const selectEl = document.getElementById('pay-customer-select');
+      if (selectEl) {
+        selectEl.innerHTML = matched.length
+          ? matched.map(c => `<option value="${c.id_pelanggan}">${c.nomor_pelanggan} — ${Utils.escapeHtml(c.nama_lengkap)} (${Utils.escapeHtml(DataHelpers.getDusunName(c.id_dusun))})</option>`).join('')
+          : `<option value="">-- Tidak ada pelanggan cocok --</option>`;
+
+        if (matched.length > 0) {
+          if (!q || !matched.some(m => m.id_pelanggan === selectedPaymentCustomerId)) {
+            selectedPaymentCustomerId = matched[0].id_pelanggan;
+          }
+          selectEl.value = selectedPaymentCustomerId;
+        } else {
+          selectedPaymentCustomerId = '';
+        }
+      }
+
+      const panelEl = document.getElementById('payment-customer-detail-panel');
+      if (panelEl) {
+        panelEl.innerHTML = buildPaymentCustomerPanelHtml();
+        refreshIcons(panelEl);
+      }
+    }
+
+    function onPaymentCustomerSelectChange(newId) {
+      selectedPaymentCustomerId = newId;
+      const panelEl = document.getElementById('payment-customer-detail-panel');
+      if (panelEl) {
+        panelEl.innerHTML = buildPaymentCustomerPanelHtml();
+        refreshIcons(panelEl);
+      }
+    }
+
+    async function handlePembayaranFormSubmit(e) {
+      e.preventDefault();
+      if (!requireUnlockedAction('pembayaran')) return;
+      const selectedIds = Array.from(document.querySelectorAll('.pay-bill-chk:checked')).map(c => c.value);
+      if (selectedIds.length === 0) {
+        Utils.toast('warning', 'Pilih minimal satu tagihan.');
+        return;
+      }
+      const btn = document.getElementById('btn-submit-pembayaran');
+      const btnTxt = document.getElementById('btn-submit-pembayaran-text');
+      btn.disabled = true;
+      if (btnTxt) btnTxt.textContent = 'Menyimpan Transaksi...';
+
+      try {
+        const amount = Number(document.getElementById('pay-amount').value || 0);
+        const res = await ApiClient.request('catatPembayaran', {
+          queueable: true,
+          idempotencyKey: Utils.generateId('PAY'),
+          id_pelanggan: selectedPaymentCustomerId,
+          tagihanIds: selectedIds,
+          jumlah_bayar: amount,
+          metode: document.getElementById('pay-metode').value,
+          jenis: document.getElementById('pay-jenis').value,
+          keterangan: document.getElementById('pay-ket').value.trim()
+        });
+        if (!res.success) {
+          Swal.fire('Gagal', res.message, 'error');
+          return;
+        }
+        renderCurrentPage();
+        if (res.transaksi) {
+          openStrukModal(res.transaksi.id_pembayaran);
+        }
+        Utils.toast('success', 'Pembayaran Berhasil Dicatat');
+      } catch (err) {
+        Swal.fire('Gagal Menyimpan', err.message || 'Periksa koneksi internet Anda.', 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+        if (btnTxt) btnTxt.textContent = 'Proses & Tampilkan Struk';
+      }
+    }
+
+    function renderPembayaran(container) {
+      const editable = canManage('pembayaran');
+      const q = paymentCustomerSearch.toLowerCase().trim();
+      const customers = AppState.db.pelanggan
+        .filter(p => DataHelpers.matchesPelangganSearch(p, q))
+        .sort((a, b) => {
+          if (!q) return 0;
+          return DataHelpers.rankSearchScore(a.nama_lengkap, q) - DataHelpers.rankSearchScore(b.nama_lengkap, q);
+        });
+
+      if (!selectedPaymentCustomerId && customers.length > 0) {
+        const withUnpaid = customers.find(c =>
+          AppState.db.tagihan.some(t => t.id_pelanggan === c.id_pelanggan && t.status !== 'Lunas' && t.status !== 'Dibatalkan')
+        );
+        selectedPaymentCustomerId = withUnpaid ? withUnpaid.id_pelanggan : customers[0].id_pelanggan;
+      }
+
       const recentTrx = AppState.db.pembayaran.slice(0, 20);
 
       container.innerHTML = `
@@ -3109,88 +3670,22 @@
 
             <div class="text-xs space-y-3">
               <div>
-                <label class="block font-bold text-slate-600 mb-1">Pilih Pelanggan</label>
-                <select onchange="selectedPaymentCustomerId=this.value; renderCurrentPage()" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold">
-                  ${customers.map(c => `<option value="${c.id_pelanggan}" ${c.id_pelanggan === selectedPaymentCustomerId ? 'selected' : ''}>${c.nomor_pelanggan} — ${Utils.escapeHtml(c.nama_lengkap)} (${Utils.escapeHtml(DataHelpers.getDusunName(c.id_dusun))})</option>`).join('')}
+                <label class="block font-bold text-slate-600 mb-1">Cari &amp; Pilih Pelanggan</label>
+                <div class="relative mb-2">
+                  <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                  <input type="text" value="${Utils.escapeHtml(paymentCustomerSearch)}" oninput="onPaymentCustomerSearchInput(this.value)"
+                    placeholder="Ketik nama pelanggan, no. pelanggan, dusun..." class="w-full pl-8 pr-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:border-blue-500 focus:outline-none" />
+                </div>
+                <select id="pay-customer-select" onchange="onPaymentCustomerSelectChange(this.value)" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold">
+                  ${customers.length
+                    ? customers.map(c => `<option value="${c.id_pelanggan}" ${c.id_pelanggan === selectedPaymentCustomerId ? 'selected' : ''}>${c.nomor_pelanggan} — ${Utils.escapeHtml(c.nama_lengkap)} (${Utils.escapeHtml(DataHelpers.getDusunName(c.id_dusun))})</option>`).join('')
+                    : `<option value="">-- Tidak ada pelanggan cocok --</option>`}
                 </select>
               </div>
 
-              ${selectedPlg ? `
-                <div class="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 space-y-1">
-                  <p class="font-extrabold text-blue-900">${Utils.escapeHtml(selectedPlg.nama_lengkap)} (${selectedPlg.nomor_pelanggan})</p>
-                  <p class="text-[11px] text-blue-800">${Utils.escapeHtml(DataHelpers.getDusunName(selectedPlg.id_dusun))} • Golongan: ${Utils.escapeHtml(selectedPlg.golongan)}</p>
-                  <p class="text-xs font-extrabold text-rose-600 pt-1">Total Tagihan Belum Lunas: ${Utils.formatRupiah(totalUnpaid)}</p>
-                </div>
-              ` : ''}
-
-              ${unpaidBills.length > 0 ? `
-                <form id="form-pembayaran" class="space-y-3">
-                  <div>
-                    <label class="block font-bold text-slate-600 mb-1">Pilih Tagihan yang Dibayar:</label>
-                    <div class="space-y-1.5 max-h-44 overflow-y-auto border border-slate-200 rounded-xl p-2.5 bg-slate-50">
-                      ${unpaidBills.map(b => {
-                        const bebanNom = Number(b.nominal_beban ?? b.tarif_snapshot?.nominal_beban ?? 0);
-                        return `
-                          <label class="flex items-center justify-between gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer">
-                            <div class="flex items-center gap-2">
-                              <input type="checkbox" class="pay-bill-chk rounded text-emerald-600" value="${b.id_tagihan}" data-sisa="${b.sisa_tagihan}" checked onchange="recalcSelectedPaymentAmount()" />
-                              <div>
-                                <p class="font-bold text-slate-800">${Utils.formatPeriode(b.periode)} (${b.pemakaian} m³)</p>
-                                <p class="text-[10px] text-slate-500">Air ${Utils.formatRupiah(b.subtotal_air)} + Beban ${Utils.formatRupiah(bebanNom)}</p>
-                              </div>
-                            </div>
-                            <span class="font-extrabold text-slate-900">${Utils.formatRupiah(b.sisa_tagihan)}</span>
-                          </label>`;
-                      }).join('')}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="block font-bold text-slate-600 mb-1">Jumlah Pembayaran (Rp) *</label>
-                    <input type="number" id="pay-amount" required min="1" value="${totalUnpaid}" ${!editable ? 'readonly' : ''}
-                      class="w-full px-3.5 py-2.5 rounded-xl border border-emerald-400 font-mono font-extrabold text-base text-emerald-800 bg-emerald-50/40" />
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-2">
-                    <div>
-                      <label class="block font-bold text-slate-600 mb-1">Metode Bayar</label>
-                      <select id="pay-metode" ${!editable ? 'disabled' : ''} class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white">
-                        <option value="Tunai">Tunai</option>
-                        <option value="Transfer Bank">Transfer Bank</option>
-                        <option value="Metode Lainnya">Metode Lainnya</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label class="block font-bold text-slate-600 mb-1">Jenis Pembayaran</label>
-                      <select id="pay-jenis" ${!editable ? 'disabled' : ''} class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white">
-                        <option value="Pembayaran Penuh">Pembayaran Penuh</option>
-                        <option value="Pembayaran Sebagian">Pembayaran Sebagian</option>
-                        <option value="Pembayaran Beberapa Bulan">Beberapa Bulan</option>
-                        <option value="Pembayaran Tunggakan">Pembayaran Tunggakan</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="block font-bold text-slate-600 mb-1">Keterangan</label>
-                    <input type="text" id="pay-ket" ${!editable ? 'readonly' : ''} placeholder="Catatan pembayaran..." class="w-full px-3 py-2 rounded-xl border border-slate-300" />
-                  </div>
-
-                  ${editable ? `
-                    <button type="submit" class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2">
-                      <i data-lucide="check-circle" class="w-4 h-4"></i> Proses &amp; Tampilkan Struk
-                    </button>
-                  ` : `
-                    <button type="button" onclick="openPinUnlockModal()" class="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs">
-                      Buka PIN untuk Mencatat Pembayaran
-                    </button>
-                  `}
-                </form>
-              ` : `
-                <div class="p-6 rounded-xl bg-emerald-50 border border-emerald-200 text-center text-xs text-emerald-800 font-bold">
-                  Pelanggan ini tidak memiliki tagihan tertunggak (Lunas).
-                </div>
-              `}
+              <div id="payment-customer-detail-panel" class="space-y-3">
+                ${buildPaymentCustomerPanelHtml()}
+              </div>
             </div>
           </div>
 
@@ -3224,7 +3719,7 @@
                         <td class="py-2.5 px-3 text-right space-x-1 whitespace-nowrap">
                           <button type="button" onclick="openStrukModal('${trx.id_pembayaran}')" class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">Struk</button>
                           ${editable && !isCancelled ? `
-                            <button type="button" onclick="batalkanPembayaranAction('${trx.id_pembayaran}')" class="px-2 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold">Batal</button>
+                            <button type="button" onclick="batalkanPembayaranAction('${trx.id_pembayaran}')" class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold">Batal</button>
                           ` : ''}
                         </td>
                       </tr>`;
@@ -3235,38 +3730,6 @@
           </div>
         </div>
       `;
-
-      const formPay = document.getElementById('form-pembayaran');
-      if (formPay && editable) {
-        formPay.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const selectedIds = Array.from(document.querySelectorAll('.pay-bill-chk:checked')).map(c => c.value);
-          if (selectedIds.length === 0) {
-            Utils.toast('warning', 'Pilih minimal satu tagihan.');
-            return;
-          }
-          const amount = Number(document.getElementById('pay-amount').value || 0);
-          const res = await ApiClient.request('catatPembayaran', {
-            queueable: true,
-            idempotencyKey: Utils.generateId('PAY'),
-            id_pelanggan: selectedPaymentCustomerId,
-            tagihanIds: selectedIds,
-            jumlah_bayar: amount,
-            metode: document.getElementById('pay-metode').value,
-            jenis: document.getElementById('pay-jenis').value,
-            keterangan: document.getElementById('pay-ket').value.trim()
-          });
-          if (!res.success) {
-            Swal.fire('Gagal', res.message, 'error');
-            return;
-          }
-          renderCurrentPage();
-          if (res.transaksi) {
-            openStrukModal(res.transaksi.id_pembayaran);
-          }
-          Utils.toast('success', 'Pembayaran Berhasil Dicatat');
-        });
-      }
     }
 
     function recalcSelectedPaymentAmount() {
@@ -3475,29 +3938,23 @@
 
     function renderTunggakan(container) {
       const sortedDusun = [...AppState.db.dusun].sort((a, b) => a.urutan - b.urutan);
-      const allTunggakan = DataHelpers.getTunggakanPerPelanggan();
-      const filtered = allTunggakan.filter(t => {
-        const matchD = tunggakanFilter.dusun === 'ALL' || t.id_dusun === tunggakanFilter.dusun;
-        const q = tunggakanFilter.search.toLowerCase();
-        const matchQ = !q || t.nama_lengkap.toLowerCase().includes(q) || t.nomor_pelanggan.toLowerCase().includes(q);
-        return matchD && matchQ;
-      });
-
-      const totalNominal = filtered.reduce((s, t) => s + t.total_tunggakan, 0);
 
       container.innerHTML = `
         <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
           <div class="flex flex-wrap items-center gap-2">
-            <input type="text" value="${Utils.escapeHtml(tunggakanFilter.search)}" oninput="tunggakanFilter.search=this.value; renderCurrentPage()"
-              placeholder="Cari pelanggan menunggak..." class="px-3.5 py-2 rounded-xl border border-slate-300 text-xs" />
-            <select onchange="tunggakanFilter.dusun=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white">
+            <div class="relative">
+              <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+              <input type="text" value="${Utils.escapeHtml(tunggakanFilter.search)}" oninput="tunggakanFilter.search=this.value; updateTunggakanTableBody()"
+                placeholder="Cari pelanggan menunggak..." class="pl-8 pr-3.5 py-2 rounded-xl border border-slate-300 text-xs w-56 focus:border-blue-500 focus:outline-none" />
+            </div>
+            <select onchange="tunggakanFilter.dusun=this.value; updateTunggakanTableBody()" class="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white">
               <option value="ALL">Semua Dusun</option>
               ${sortedDusun.map(d => `<option value="${d.id_dusun}" ${tunggakanFilter.dusun === d.id_dusun ? 'selected' : ''}>${Utils.escapeHtml(d.nama_dusun)}</option>`).join('')}
             </select>
           </div>
           <div class="flex items-center gap-2">
-            <span class="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-extrabold">
-              Total Tunggakan: ${Utils.formatRupiah(totalNominal)}
+            <span id="tunggakan-total-badge" class="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-extrabold">
+              Total Tunggakan: Rp 0
             </span>
             <button type="button" onclick="exportTunggakanCSV()" class="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs">
               Export Excel
@@ -3526,40 +3983,72 @@
                   <th class="py-3 px-4 text-right">Aksi &amp; Pengingat</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-slate-100">
-                ${filtered.length ? filtered.map(t => {
-                  let pillClass = 'bg-yellow-100 text-yellow-800';
-                  if (t.jumlah_bulan >= 2 && t.jumlah_bulan <= 3) pillClass = 'bg-orange-100 text-orange-800';
-                  else if (t.jumlah_bulan > 3) pillClass = 'bg-rose-100 text-rose-800';
-
-                  return `
-                    <tr class="hover:bg-slate-50">
-                      <td class="py-3 px-4">
-                        <p class="font-bold text-slate-800">${Utils.escapeHtml(t.nama_lengkap)}</p>
-                        <p class="font-mono text-[11px] text-slate-500">${t.nomor_pelanggan}</p>
-                      </td>
-                      <td class="py-3 px-4">${Utils.escapeHtml(t.nama_dusun)}</td>
-                      <td class="py-3 px-4 text-center"><span class="px-2.5 py-0.5 rounded-full font-bold ${pillClass}">${t.jumlah_bulan} Bulan</span></td>
-                      <td class="py-3 px-4 text-right">${Utils.formatRupiah(t.total_pokok)}</td>
-                      <td class="py-3 px-4 text-right text-rose-600 font-semibold">${Utils.formatRupiah(t.total_denda)}</td>
-                      <td class="py-3 px-4 text-right font-extrabold text-rose-700">${Utils.formatRupiah(t.total_tunggakan)}</td>
-                      <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
-                        <button type="button" onclick="sendWhatsAppReminder('${t.id_pelanggan}')"
-                          class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold inline-flex items-center gap-1">
-                          <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> Kirim WA
-                        </button>
-                        <button type="button" onclick="selectedPaymentCustomerId='${t.id_pelanggan}'; navigateTo('pembayaran')"
-                          class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">
-                          Bayar
-                        </button>
-                      </td>
-                    </tr>`;
-                }).join('') : `<tr><td colspan="7" class="py-8 text-center text-emerald-600 font-bold">Tidak ada pelanggan menunggak!</td></tr>`}
-              </tbody>
+              <tbody id="tunggakan-tbody" class="divide-y divide-slate-100"></tbody>
             </table>
           </div>
         </div>
       `;
+
+      updateTunggakanTableBody();
+    }
+
+    function updateTunggakanTableBody() {
+      const tbody = document.getElementById('tunggakan-tbody');
+      if (!tbody) return;
+      const allTunggakan = DataHelpers.getTunggakanPerPelanggan();
+      const q = tunggakanFilter.search.toLowerCase().trim();
+
+      const filtered = allTunggakan
+        .filter(t => {
+          const matchD = tunggakanFilter.dusun === 'ALL' || t.id_dusun === tunggakanFilter.dusun;
+          const matchQ = !q ||
+            String(t.nama_lengkap ?? '').toLowerCase().includes(q) ||
+            String(t.nomor_pelanggan ?? '').toLowerCase().includes(q) ||
+            String(t.nama_dusun ?? '').toLowerCase().includes(q);
+          return matchD && matchQ;
+        })
+        .sort((a, b) => {
+          if (q) {
+            const diff = DataHelpers.rankSearchScore(a.nama_lengkap, q) - DataHelpers.rankSearchScore(b.nama_lengkap, q);
+            if (diff !== 0) return diff;
+          }
+          return b.total_tunggakan - a.total_tunggakan;
+        });
+
+      const totalNominal = filtered.reduce((s, t) => s + t.total_tunggakan, 0);
+      const badge = document.getElementById('tunggakan-total-badge');
+      if (badge) badge.textContent = `Total Tunggakan: ${Utils.formatRupiah(totalNominal)}`;
+
+      tbody.innerHTML = filtered.length ? filtered.map(t => {
+        let pillClass = 'bg-yellow-100 text-yellow-800';
+        if (t.jumlah_bulan >= 2 && t.jumlah_bulan <= 3) pillClass = 'bg-orange-100 text-orange-800';
+        else if (t.jumlah_bulan > 3) pillClass = 'bg-rose-100 text-rose-800';
+
+        return `
+          <tr class="hover:bg-slate-50 transition-colors duration-75">
+            <td class="py-3 px-4">
+              <p class="font-bold text-slate-800">${Utils.escapeHtml(t.nama_lengkap)}</p>
+              <p class="font-mono text-[11px] text-slate-500">${t.nomor_pelanggan}</p>
+            </td>
+            <td class="py-3 px-4">${Utils.escapeHtml(t.nama_dusun)}</td>
+            <td class="py-3 px-4 text-center"><span class="px-2.5 py-0.5 rounded-full font-bold ${pillClass}">${t.jumlah_bulan} Bulan</span></td>
+            <td class="py-3 px-4 text-right">${Utils.formatRupiah(t.total_pokok)}</td>
+            <td class="py-3 px-4 text-right text-rose-600 font-semibold">${Utils.formatRupiah(t.total_denda)}</td>
+            <td class="py-3 px-4 text-right font-extrabold text-rose-700">${Utils.formatRupiah(t.total_tunggakan)}</td>
+            <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+              <button type="button" onclick="sendWhatsAppReminder('${t.id_pelanggan}')"
+                class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold inline-flex items-center gap-1">
+                <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> Kirim WA
+              </button>
+              <button type="button" onclick="selectedPaymentCustomerId='${t.id_pelanggan}'; navigateTo('pembayaran')"
+                class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">
+                Bayar
+              </button>
+            </td>
+          </tr>`;
+      }).join('') : `<tr><td colspan="7" class="py-8 text-center text-emerald-600 font-bold">Tidak ada pelanggan menunggak!</td></tr>`;
+
+      refreshIcons(tbody);
     }
 
     function sendWhatsAppReminder(id_pelanggan) {
@@ -4137,7 +4626,7 @@
         <form id="form-dusun" class="space-y-4 text-xs">
           <div>
             <label class="block font-bold text-slate-600 mb-1">Nama Dusun *</label>
-            <input type="text" id="dsn-nama" required value="${Utils.escapeHtml(d?.nama_dusun || '')}" placeholder="Contoh: Dusun 8 (Sidomulyo)"
+            <input type="text" id="dsn-nama" required value="${Utils.escapeHtml(d?.nama_dusun || '')}" placeholder="Contoh: Dusun Gedad"
               class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-bold" />
           </div>
           <div class="flex justify-end gap-2">
@@ -4579,14 +5068,14 @@
           <div class="space-y-6">
             <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3 text-xs">
               <h4 class="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                <i data-lucide="cloud" class="w-4 h-4 text-blue-600"></i> Koneksi Google Apps Script
+                <i data-lucide="cloud" class="w-4 h-4 text-blue-600"></i> Koneksi Cloud Firebase Firestore
               </h4>
-              <p class="text-slate-500">Hubungkan aplikasi ini ke Web App Google Apps Script &amp; Google Sheets Desa Kalikurmo.</p>
-              <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 font-mono text-[11px] break-all">
-                ${AppState.apiUrl ? Utils.escapeHtml(AppState.apiUrl) : 'Belum diatur (Mode Simulasi Lokal)'}
+              <p class="text-slate-500">Aplikasi ini terhubung secara real-time ke database Cloud Firestore milik PAM Desa Kalikurmo.</p>
+              <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 font-mono text-[11px] text-emerald-900">
+                Project ID: <strong>${FIREBASE_PROJECT_ID}</strong> (Real-Time Sync Aktif)
               </div>
               <button type="button" onclick="openApiConfigModal()" class="w-full py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold border border-blue-200">
-                Ubah URL Backend Cloud
+                Cek Status Koneksi Firebase
               </button>
             </div>
 
@@ -4646,7 +5135,7 @@
 
     /**
      * =========================================================================
-     * BOOTSTRAP INITIALIZATION
+     * BOOTSTRAP INITIALIZATION (INSTANT STARTUP + NON-BLOCKING CLOUD SYNC)
      * =========================================================================
      */
     window.addEventListener('online', () => {
@@ -4661,10 +5150,10 @@
     });
 
     window.onload = async function () {
+      hydrateDbCache();
       await CloudSimulator.init();
-      await syncFromCloud(false);
       enterAppShell();
-      lucide.createIcons();
+      await FirebaseSyncEngine.start();
     };
   </script>
 </body>
