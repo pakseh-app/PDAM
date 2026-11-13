@@ -540,6 +540,21 @@
           .replace(/'/g, '&#039;');
       },
 
+      formatWhatsAppNumber(rawPhone) {
+        let digits = String(rawPhone ?? '').replace(/[^0-9]/g, '');
+        if (!digits) return '';
+        if (digits.startsWith('0062')) {
+          digits = '62' + digits.slice(4);
+        } else if (digits.startsWith('620')) {
+          digits = '62' + digits.slice(3);
+        } else if (digits.startsWith('0')) {
+          digits = '62' + digits.slice(1);
+        } else if (digits.startsWith('8')) {
+          digits = '62' + digits;
+        }
+        return digits;
+      },
+
       async sha256(text) {
         const encoder = new TextEncoder();
         const data = encoder.encode(text);
@@ -3756,23 +3771,36 @@
         const snap = b.tarif_snapshot || {};
         const bebanNom = Number(b.nominal_beban ?? snap.nominal_beban ?? 0);
         const hargaSatuan = Number(snap.harga_per_m3 || 0);
+        const meterRec = AppState.db.meterAir.find(m => m.id_pelanggan === b.id_pelanggan && m.periode === b.periode);
+        const mLalu = Number(b.meter_sebelumnya ?? meterRec?.meter_sebelumnya ?? 0);
+        const mKini = Number(b.meter_sekarang ?? meterRec?.meter_sekarang ?? (mLalu + Number(b.pemakaian || 0)));
+        const pakai = Number(b.pemakaian ?? Math.max(0, mKini - mLalu));
         return `
           <div class="py-2 border-b border-dashed border-slate-300 space-y-1">
-            <div class="flex justify-between font-bold text-slate-800">
-              <span>Tagihan Bulan ${Utils.formatPeriode(b.periode)} (${b.pemakaian} m³ × ${Utils.formatRupiah(hargaSatuan)})</span>
-              <span>${Utils.formatRupiah(b.subtotal_air)}</span>
+            <div class="font-bold text-slate-800">Tagihan Bulan ${Utils.formatPeriode(b.periode)}</div>
+            <div class="flex justify-between text-[11px] text-slate-600 pl-2">
+              <span>• Meter Bulan Lalu</span>
+              <span class="font-semibold">${mLalu} m³</span>
             </div>
-            <div class="flex justify-between text-slate-600">
-              <span>Beban</span>
+            <div class="flex justify-between text-[11px] text-slate-600 pl-2">
+              <span>• Meter Bulan Ini</span>
+              <span class="font-semibold">${mKini} m³</span>
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-700 pl-2">
+              <span>• Pemakaian (${pakai} m³ × ${Utils.formatRupiah(hargaSatuan)})</span>
+              <span class="font-bold">${Utils.formatRupiah(b.subtotal_air)}</span>
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-600 pl-2">
+              <span>• Beban</span>
               <span>${Utils.formatRupiah(bebanNom)}</span>
             </div>
             ${Number(b.denda) > 0 ? `
-              <div class="flex justify-between text-rose-600">
-                <span>Denda Keterlambatan</span>
+              <div class="flex justify-between text-[11px] text-rose-600 pl-2">
+                <span>• Denda Keterlambatan</span>
                 <span>${Utils.formatRupiah(b.denda)}</span>
               </div>
             ` : ''}
-            <div class="flex justify-between font-extrabold text-slate-900 pt-0.5">
+            <div class="flex justify-between font-extrabold text-slate-900 pt-1">
               <span>Total</span>
               <span>${Utils.formatRupiah(b.total_tagihan)}</span>
             </div>
@@ -3927,32 +3955,152 @@
       }, 150);
     }
 
-    function shareStrukWhatsApp(id_pembayaran) {
+    async function shareStrukWhatsApp(id_pembayaran) {
       const trx = AppState.db.pembayaran.find(p => p.id_pembayaran === id_pembayaran);
       if (!trx) return;
       const plg = DataHelpers.getPelangganById(trx.id_pelanggan);
-      const phone = (plg?.no_telepon || '').replace(/[^0-9]/g, '');
 
       const relatedIds = String(trx.id_tagihan || '').split(',').map(s => s.trim()).filter(Boolean);
       const relatedBills = AppState.db.tagihan.filter(t => relatedIds.includes(t.id_tagihan));
       const detailLines = relatedBills.map(b => {
         const snap = b.tarif_snapshot || {};
         const bebanNom = Number(b.nominal_beban ?? snap.nominal_beban ?? 0);
-        return `Tagihan Bulan ${Utils.formatPeriode(b.periode)} (${b.pemakaian} m³ × ${Utils.formatRupiah(snap.harga_per_m3 || 0)}): ${Utils.formatRupiah(b.subtotal_air)}\n` +
-               `Beban: ${Utils.formatRupiah(bebanNom)}\n` +
+        const meterRec = AppState.db.meterAir.find(m => m.id_pelanggan === b.id_pelanggan && m.periode === b.periode);
+        const mLalu = Number(b.meter_sebelumnya ?? meterRec?.meter_sebelumnya ?? 0);
+        const mKini = Number(b.meter_sekarang ?? meterRec?.meter_sekarang ?? (mLalu + Number(b.pemakaian || 0)));
+        const pakai = Number(b.pemakaian ?? Math.max(0, mKini - mLalu));
+        return `*Tagihan Bulan ${Utils.formatPeriode(b.periode)}*\n` +
+               `• Meter Bulan Lalu: ${mLalu} m³\n` +
+               `• Meter Bulan Ini: ${mKini} m³\n` +
+               `• Pemakaian (${pakai} m³ × ${Utils.formatRupiah(snap.harga_per_m3 || 0)}): ${Utils.formatRupiah(b.subtotal_air)}\n` +
+               `• Beban: ${Utils.formatRupiah(bebanNom)}\n` +
                `Total: *${Utils.formatRupiah(b.total_tagihan)}*`;
       }).join('\n\n');
 
       const msg = `*STRUK PEMBAYARAN ${AppState.db.pengaturan.nama_aplikasi}*\n` +
         `No. Transaksi: ${trx.id_pembayaran}\n` +
-        `Pelanggan: ${plg?.nama_lengkap} (${plg?.nomor_pelanggan})\n` +
+        `Pelanggan: ${plg?.nama_lengkap || '-'} (${plg?.nomor_pelanggan || '-'})\n` +
         `Dusun: ${DataHelpers.getDusunName(plg?.id_dusun)}\n\n` +
         (detailLines ? `${detailLines}\n\n` : '') +
         `Jumlah Dibayar: *${Utils.formatRupiah(trx.jumlah_bayar)}*\n` +
         `Sisa Tunggakan: ${Utils.formatRupiah(trx.sisa_tunggakan)}\n` +
         `Petugas: ${trx.petugas}\n` +
         `Terima kasih.`;
+
+      // Render struk menjadi file gambar PNG agar dapat dikirim sebagai gambar ke WhatsApp
+      let pngBlob = null;
+      let pngFile = null;
+      const card = document.getElementById('receipt-card');
+      if (card && typeof html2canvas !== 'undefined') {
+        try {
+          const canvas = await html2canvas(card, {
+            scale: 3,
+            backgroundColor: '#ffffff',
+            useCORS: true,
+            logging: false
+          });
+          pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+          if (pngBlob) {
+            pngFile = new File([pngBlob], `Struk_PAM_Kalikurmo_${id_pembayaran}.png`, { type: 'image/png' });
+          }
+        } catch (e) { /* lanjutkan dengan fallback teks */ }
+      }
+
+      const canNativeShareFile = Boolean(
+        pngFile &&
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function' &&
+        navigator.canShare({ files: [pngFile] })
+      );
+
+      let phone = Utils.formatWhatsAppNumber(plg?.no_telepon);
+      if (!phone || phone.length < 10) {
+        const res = await Swal.fire({
+          title: 'Kirim Struk ke WhatsApp',
+          html: `<p class="text-xs text-slate-600 mb-2">Masukkan nomor WhatsApp <strong>${Utils.escapeHtml(plg?.nama_lengkap || 'pelanggan')}</strong> (contoh: <code>08123456789</code>) atau bagikan gambar struk langsung ke kontak WA:</p>`,
+          input: 'tel',
+          inputValue: plg?.no_telepon || '',
+          inputPlaceholder: '0812xxxxxxxx',
+          showCancelButton: true,
+          showDenyButton: true,
+          confirmButtonText: 'Buka Chat Nomor Ini',
+          denyButtonText: canNativeShareFile ? 'Kirim Gambar Struk (Pilih Kontak)' : 'Pilih Kontak di WA',
+          cancelButtonText: 'Batal',
+          confirmButtonColor: '#059669',
+          denyButtonColor: '#2563eb'
+        });
+
+        if (res.isDenied) {
+          if (canNativeShareFile) {
+            try {
+              await navigator.share({
+                files: [pngFile],
+                title: `Struk Pembayaran ${id_pembayaran}`,
+                text: msg
+              });
+              return;
+            } catch (err) {
+              if (err && err.name === 'AbortError') return;
+            }
+          }
+          window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+          return;
+        }
+        if (!res.isConfirmed) return;
+
+        phone = Utils.formatWhatsAppNumber(res.value);
+        if (!phone || phone.length < 10) {
+          Utils.toast('warning', 'Nomor Tidak Valid', 'Masukkan nomor HP/WA yang valid (minimal 10 digit).');
+          return;
+        }
+        if (plg && AppState.isUnlocked) {
+          ApiClient.request('savePelanggan', {
+            item: { ...plg, no_telepon: res.value.trim() }
+          }).catch(() => {});
+        }
+      } else if (canNativeShareFile) {
+        // Di HP yang mendukung kirim file gambar langsung via menu Share WhatsApp
+        const choice = await Swal.fire({
+          title: 'Kirim Struk WhatsApp',
+          html: `<p class="text-xs text-slate-600">Pilih cara pengiriman ke <strong>${Utils.escapeHtml(plg?.nama_lengkap || 'Pelanggan')}</strong> (<code>+${phone}</code>):</p>`,
+          showCancelButton: true,
+          showDenyButton: true,
+          confirmButtonText: 'Kirim Gambar Struk (PNG)',
+          denyButtonText: 'Buka Chat Langsung (+62)',
+          cancelButtonText: 'Batal',
+          confirmButtonColor: '#059669',
+          denyButtonColor: '#2563eb'
+        });
+
+        if (choice.isConfirmed) {
+          try {
+            await navigator.share({
+              files: [pngFile],
+              title: `Struk Pembayaran ${id_pembayaran}`,
+              text: msg
+            });
+            return;
+          } catch (err) {
+            if (err && err.name === 'AbortError') return;
+          }
+        } else if (!choice.isDenied) {
+          return;
+        }
+      }
+
+      // Salin gambar struk ke clipboard (untuk desktop/laptop) lalu buka chat WhatsApp pelanggan
+      let imageCopied = false;
+      if (pngBlob && navigator.clipboard && typeof window.ClipboardItem !== 'undefined') {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+          imageCopied = true;
+        } catch (e) { /* abaikan jika browser membatasi clipboard gambar */ }
+      }
+
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      if (imageCopied) {
+        Utils.toast('success', 'Chat WA Dibuka & Gambar Disalin', 'Tekan Tempel (Ctrl+V) di chat WhatsApp untuk mengirim gambar struk.');
+      }
     }
 
     async function batalkanPembayaranAction(id_pembayaran) {
@@ -4073,52 +4221,124 @@
         return matchDusun && matchSearch;
       });
 
-      list.sort((a, b) => tunggakanFilter.sort === 'asc'
-        ? a.total_tunggakan - b.total_tunggakan
-        : b.total_tunggakan - a.total_tunggakan
-      );
+      list.sort((a, b) => {
+        if (q) {
+          const scoreDiff = DataHelpers.rankSearchScore(a.nama_lengkap, q) - DataHelpers.rankSearchScore(b.nama_lengkap, q);
+          if (scoreDiff !== 0) return scoreDiff;
+        }
+        return tunggakanFilter.sort === 'asc'
+          ? a.total_tunggakan - b.total_tunggakan
+          : b.total_tunggakan - a.total_tunggakan;
+      });
 
       tbody.innerHTML = list.length ? list.map(item => {
-        let levelBadge = 'bg-amber-100 text-amber-800';
-        if (item.jumlah_bulan > 3) levelBadge = 'bg-rose-100 text-rose-700';
-        else if (item.jumlah_bulan >= 2) levelBadge = 'bg-orange-100 text-orange-700';
+        let bulanBadge = 'bg-amber-100 text-amber-800';
+        if (item.jumlah_bulan > 3) bulanBadge = 'bg-rose-100 text-rose-700';
+        else if (item.jumlah_bulan >= 2) bulanBadge = 'bg-orange-100 text-orange-700';
 
         return `
-          <tr class="hover:bg-slate-50">
+          <tr class="hover:bg-slate-50 transition-colors duration-75">
             <td class="py-3 px-4">
               <p class="font-bold text-slate-800">${Utils.escapeHtml(item.nama_lengkap)}</p>
-              <p class="font-mono text-[11px] text-slate-500">${Utils.escapeHtml(item.nomor_pelanggan)}</p>
+              <p class="font-mono text-[11px] text-slate-500">${Utils.escapeHtml(item.nomor_pelanggan)}${item.no_telepon ? ' • ' + Utils.escapeHtml(item.no_telepon) : ''}</p>
             </td>
             <td class="py-3 px-4">${Utils.escapeHtml(item.nama_dusun)}</td>
             <td class="py-3 px-4 text-center">
-              <span class="px-2.5 py-0.5 rounded-full font-bold text-[11px] ${levelBadge}">${item.jumlah_bulan} Bulan</span>
+              <span class="px-2.5 py-0.5 rounded-full font-bold text-[11px] ${bulanBadge}">${item.jumlah_bulan} Bulan</span>
             </td>
             <td class="py-3 px-4 text-right text-[11px] text-slate-600">
               Pokok: ${Utils.formatRupiah(item.total_pokok)}<br>
-              Denda: ${Utils.formatRupiah(item.total_denda)}
+              Denda: <span class="text-rose-600 font-semibold">${Utils.formatRupiah(item.total_denda)}</span>
             </td>
             <td class="py-3 px-4 text-right font-extrabold text-rose-600">${Utils.formatRupiah(item.total_tunggakan)}</td>
             <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
-              <button type="button" onclick="sendTunggakanWhatsApp('${item.id_pelanggan}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
-                Kirim WA
-              </button>
-              <button type="button" onclick="selectedPaymentCustomerId='${item.id_pelanggan}'; navigateTo('pembayaran')" class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">
-                Bayar
-              </button>
+              <button type="button" onclick="openDetailTunggakanModal('${item.id_pelanggan}')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Detail</button>
+              <button type="button" onclick="selectedPaymentCustomerId='${item.id_pelanggan}'; navigateTo('pembayaran')" class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">Bayar</button>
+              <button type="button" onclick="sendTunggakanWhatsApp('${item.id_pelanggan}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold">WhatsApp</button>
             </td>
           </tr>`;
-      }).join('') : `<tr><td colspan="6" class="py-8 text-center text-emerald-700 font-bold">Tidak ada pelanggan yang menunggak.</td></tr>`;
+      }).join('') : `<tr><td colspan="6" class="py-8 text-center text-slate-400">Tidak ada pelanggan menunggak pada filter ini.</td></tr>`;
     }
 
-    function sendTunggakanWhatsApp(id_pelanggan) {
+    function openDetailTunggakanModal(id_pelanggan) {
       const item = DataHelpers.getTunggakanPerPelanggan().find(x => x.id_pelanggan === id_pelanggan);
       if (!item) return;
-      const phone = (item.no_telepon || '').replace(/[^0-9]/g, '');
+
+      openAppModal(`Rincian Tunggakan — ${item.nama_lengkap}`, `
+        <div class="space-y-3 text-xs">
+          <div class="p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between">
+            <div>
+              <p class="font-bold text-slate-800">${Utils.escapeHtml(item.nama_lengkap)} (${Utils.escapeHtml(item.nomor_pelanggan)})</p>
+              <p class="text-[11px] text-slate-500">${Utils.escapeHtml(item.nama_dusun)} • ${item.jumlah_bulan} Bulan Menunggak</p>
+            </div>
+            <p class="text-sm font-extrabold text-rose-700">${Utils.formatRupiah(item.total_tunggakan)}</p>
+          </div>
+
+          <div class="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden">
+            ${item.tagihanList.map(b => `
+              <div class="p-3 bg-white flex items-center justify-between">
+                <div>
+                  <p class="font-bold text-slate-800">${Utils.formatPeriode(b.periode)} (${b.pemakaian} m³)</p>
+                  <p class="text-[11px] text-slate-500">Status: ${b.status}${Number(b.denda) > 0 ? ' • Denda ' + Utils.formatRupiah(b.denda) : ''}</p>
+                </div>
+                <span class="font-extrabold text-slate-900">${Utils.formatRupiah(b.sisa_tagihan)}</span>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeAppModal()" class="px-4 py-2 rounded-xl bg-slate-100 font-semibold">Tutup</button>
+            <button type="button" onclick="closeAppModal(); selectedPaymentCustomerId='${item.id_pelanggan}'; navigateTo('pembayaran')" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Bayar Sekarang</button>
+          </div>
+        </div>
+      `, 'max-w-lg');
+    }
+
+    async function sendTunggakanWhatsApp(id_pelanggan) {
+      const item = DataHelpers.getTunggakanPerPelanggan().find(x => x.id_pelanggan === id_pelanggan);
+      if (!item) return;
+      const plg = DataHelpers.getPelangganById(id_pelanggan);
       const msg = `Assalamu'alaikum.\n` +
         `Kepada Yth. Bapak/Ibu ${item.nama_lengkap}.\n` +
         `Kami informasikan bahwa pembayaran air PAM Desa Kalikurmo masih memiliki tunggakan sebesar ${Utils.formatRupiah(item.total_tunggakan)}.\n` +
         `Mohon segera melakukan pembayaran kepada petugas PAM desa.\n` +
         `Terima kasih atas perhatian dan kerja samanya.`;
+
+      let phone = Utils.formatWhatsAppNumber(item.no_telepon);
+      if (!phone || phone.length < 10) {
+        const res = await Swal.fire({
+          title: 'Nomor WhatsApp Pelanggan',
+          html: `<p class="text-xs text-slate-600 mb-2">Nomor telepon <strong>${Utils.escapeHtml(item.nama_lengkap)}</strong> belum diisi. Masukkan nomor WhatsApp tujuan (contoh: <code>08123456789</code>):</p>`,
+          input: 'tel',
+          inputValue: item.no_telepon || '',
+          inputPlaceholder: '0812xxxxxxxx',
+          showCancelButton: true,
+          showDenyButton: true,
+          confirmButtonText: 'Kirim ke Nomor Ini',
+          denyButtonText: 'Pilih Kontak di WA',
+          cancelButtonText: 'Batal',
+          confirmButtonColor: '#059669',
+          denyButtonColor: '#2563eb'
+        });
+
+        if (res.isDenied) {
+          window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+          return;
+        }
+        if (!res.isConfirmed) return;
+
+        phone = Utils.formatWhatsAppNumber(res.value);
+        if (!phone || phone.length < 10) {
+          Utils.toast('warning', 'Nomor Tidak Valid', 'Masukkan nomor HP/WA yang valid (minimal 10 digit).');
+          return;
+        }
+        if (plg && AppState.isUnlocked) {
+          ApiClient.request('savePelanggan', {
+            item: { ...plg, no_telepon: res.value.trim() }
+          }).catch(() => {});
+        }
+      }
+
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
