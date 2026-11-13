@@ -46,8 +46,9 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
 
-  <!-- html2canvas untuk Export Struk Pembayaran ke Gambar PNG -->
+  <!-- html2canvas & jsPDF untuk Export Struk & Laporan ke PNG / PDF -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <!-- Firebase Cloud Firestore SDK (Real-Time Multi-Device Database: pdam-94a2f) -->
   <script type="module">
@@ -1549,7 +1550,7 @@
 
             const targetBills = db.tagihan
               .filter(t => tagihanIds.includes(t.id_tagihan) && t.status !== 'Lunas' && t.status !== 'Dibatalkan')
-              .sort((a, b) => a.periode.localeCompare(b.periode));
+              .sort((a, b) => String(a.periode ?? '').localeCompare(String(b.periode ?? '')));
 
             if (targetBills.length === 0) {
               return { success: false, message: 'Tidak ada tagihan aktif yang dipilih.' };
@@ -1599,16 +1600,19 @@
             const trx = db.pembayaran.find(p => p.id_pembayaran === id_pembayaran);
             if (!trx || trx.status === 'Dibatalkan') return { success: false, message: 'Transaksi tidak valid atau sudah dibatalkan.' };
             trx.status = 'Dibatalkan';
-            trx.keterangan = `${trx.keterangan} [DIBATALKAN: ${alasan}]`;
+            trx.keterangan = `${trx.keterangan || 'Pembayaran air'} [DIBATALKAN: ${alasan}]`;
 
-            const billIds = trx.id_tagihan.split(',').map(s => s.trim());
-            let refund = Number(trx.jumlah_bayar);
+            const rawTagihanIds = Array.isArray(trx.id_tagihan)
+              ? trx.id_tagihan.join(',')
+              : String(trx.id_tagihan ?? trx.tagihanIds ?? '');
+            const billIds = rawTagihanIds.split(',').map(s => s.trim()).filter(Boolean);
+            let refund = Number(trx.jumlah_bayar || 0);
             for (const bId of billIds) {
               const bill = db.tagihan.find(t => t.id_tagihan === bId);
               if (bill && refund > 0) {
-                const revertAmt = Math.min(refund, Number(bill.jumlah_dibayar));
-                bill.jumlah_dibayar -= revertAmt;
-                bill.sisa_tagihan = Number(bill.total_tagihan) - bill.jumlah_dibayar;
+                const revertAmt = Math.min(refund, Number(bill.jumlah_dibayar || 0));
+                bill.jumlah_dibayar = Math.max(0, Number(bill.jumlah_dibayar || 0) - revertAmt);
+                bill.sisa_tagihan = Math.max(0, Number(bill.total_tagihan || 0) - bill.jumlah_dibayar);
                 bill.status = bill.jumlah_dibayar > 0 ? 'Dibayar Sebagian' : 'Belum Dibayar';
                 refund -= revertAmt;
               }
@@ -3826,11 +3830,11 @@
           <button type="button" onclick="downloadStrukPNG('${trx.id_pembayaran}')" class="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center justify-center gap-1.5 shadow-sm">
             <i data-lucide="image" class="w-4 h-4"></i> Download PNG
           </button>
+          <button type="button" onclick="downloadStrukPDF('${trx.id_pembayaran}')" class="py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center justify-center gap-1.5 shadow-sm">
+            <i data-lucide="file-down" class="w-4 h-4"></i> Download PDF
+          </button>
           <button type="button" onclick="printStrukReceipt()" class="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold flex items-center justify-center gap-1.5">
             <i data-lucide="printer" class="w-4 h-4"></i> Cetak Struk
-          </button>
-          <button type="button" onclick="printStrukReceipt()" class="py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center justify-center gap-1.5">
-            <i data-lucide="file-down" class="w-4 h-4"></i> PDF
           </button>
           <button type="button" onclick="shareStrukWhatsApp('${trx.id_pembayaran}')" class="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-1.5">
             <i data-lucide="share-2" class="w-4 h-4"></i> WhatsApp
@@ -3868,6 +3872,46 @@
         Utils.toast('success', 'Struk PNG Tersimpan', 'Gambar struk siap dikirim via WhatsApp.');
       } catch (err) {
         Utils.toast('error', 'Gagal Membuat PNG', err.message || 'Terjadi kesalahan saat merender gambar.');
+      }
+    }
+
+    async function downloadStrukPDF(id_pembayaran) {
+      const card = document.getElementById('receipt-card');
+      if (!card) return;
+
+      if (typeof html2canvas === 'undefined' || !window.jspdf || !window.jspdf.jsPDF) {
+        Utils.toast('error', 'Gagal Memuat Generator PDF', 'Periksa koneksi internet Anda lalu muat ulang halaman.');
+        return;
+      }
+
+      try {
+        Utils.toast('info', 'Membuat File PDF...', 'Sedang mengunduh struk PDF.');
+        const canvas = await html2canvas(card, {
+          scale: 3,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          logging: false
+        });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+
+        const pageWidthMm = 110;
+        const marginMm = 6;
+        const imgWidthMm = pageWidthMm - marginMm * 2;
+        const imgHeightMm = (canvas.height * imgWidthMm) / canvas.width;
+        const pageHeightMm = Math.max(140, imgHeightMm + marginMm * 2);
+
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: [pageWidthMm, pageHeightMm]
+        });
+
+        pdf.addImage(imgData, 'PNG', marginMm, marginMm, imgWidthMm, imgHeightMm);
+        pdf.save(`Struk_PAM_Kalikurmo_${id_pembayaran}.pdf`);
+        Utils.toast('success', 'File PDF Terunduh', `Struk_PAM_Kalikurmo_${id_pembayaran}.pdf`);
+      } catch (err) {
+        Utils.toast('error', 'Gagal Membuat PDF', err.message || 'Terjadi kesalahan saat mengunduh PDF.');
       }
     }
 
@@ -3924,49 +3968,73 @@
         inputValidator: (v) => !v && 'Alasan wajib diisi!'
       });
       if (!alasan) return;
-      await ApiClient.request('batalkanPembayaran', { id_pembayaran, alasan });
-      renderCurrentPage();
-      Utils.toast('info', 'Transaksi Pembayaran Dibatalkan');
+      try {
+        const res = await ApiClient.request('batalkanPembayaran', { id_pembayaran, alasan });
+        if (!res.success) {
+          Swal.fire('Gagal', res.message || 'Transaksi gagal dibatalkan.', 'error');
+          return;
+        }
+        renderCurrentPage();
+        Utils.toast('info', 'Transaksi Pembayaran Dibatalkan');
+      } catch (err) {
+        Swal.fire('Gagal Membatalkan', err.message || 'Terjadi kesalahan saat membatalkan pembayaran.', 'error');
+      }
+    }
+
+    function downloadCSV(filename, rows) {
+      const csvContent = rows
+        .map(r => r.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+        .join('\r\n');
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      Utils.toast('success', 'File Berhasil Diunduh', filename);
     }
 
     /**
      * =========================================================================
-     * MODULE 12: MANAJEMEN TUNGGAKAN & PENGINGAT WHATSAPP
+     * MODULE 12: MANAJEMEN TUNGGAKAN & PENGINGAT WHATSAPP OTOMATIS
      * =========================================================================
      */
-    let tunggakanFilter = { dusun: 'ALL', search: '' };
+    let tunggakanFilter = { search: '', dusun: 'ALL', sort: 'desc' };
 
     function renderTunggakan(container) {
       const sortedDusun = [...AppState.db.dusun].sort((a, b) => a.urutan - b.urutan);
+      const list = DataHelpers.getTunggakanPerPelanggan();
+      const totalSemuaTunggakan = list.reduce((s, x) => s + Number(x.total_tunggakan), 0);
 
       container.innerHTML = `
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
           <div class="flex flex-wrap items-center gap-2">
             <div class="relative">
               <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
               <input type="text" value="${Utils.escapeHtml(tunggakanFilter.search)}" oninput="tunggakanFilter.search=this.value; updateTunggakanTableBody()"
-                placeholder="Cari pelanggan menunggak..." class="pl-8 pr-3.5 py-2 rounded-xl border border-slate-300 text-xs w-56 focus:border-blue-500 focus:outline-none" />
+                placeholder="Cari nama / no. pelanggan..." class="pl-8 pr-3.5 py-2 rounded-xl border border-slate-300 text-xs w-56 focus:border-blue-500 focus:outline-none" />
             </div>
-            <select onchange="tunggakanFilter.dusun=this.value; updateTunggakanTableBody()" class="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white">
+            <select onchange="tunggakanFilter.dusun=this.value; updateTunggakanTableBody()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white">
               <option value="ALL">Semua Dusun</option>
               ${sortedDusun.map(d => `<option value="${d.id_dusun}" ${tunggakanFilter.dusun === d.id_dusun ? 'selected' : ''}>${Utils.escapeHtml(d.nama_dusun)}</option>`).join('')}
             </select>
+            <select onchange="tunggakanFilter.sort=this.value; updateTunggakanTableBody()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white">
+              <option value="desc" ${tunggakanFilter.sort === 'desc' ? 'selected' : ''}>Tunggakan Terbesar</option>
+              <option value="asc" ${tunggakanFilter.sort === 'asc' ? 'selected' : ''}>Tunggakan Terkecil</option>
+            </select>
           </div>
-          <div class="flex items-center gap-2">
-            <span id="tunggakan-total-badge" class="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-extrabold">
-              Total Tunggakan: Rp 0
+
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-extrabold">
+              Total Tunggakan: ${Utils.formatRupiah(totalSemuaTunggakan)} (${list.length} Pelanggan)
             </span>
-            <button type="button" onclick="exportTunggakanCSV()" class="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs">
-              Export Excel
+            <button type="button" onclick="exportTunggakanCSV()" class="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold">
+              Export Excel/CSV
             </button>
           </div>
-        </div>
-
-        <div class="flex flex-wrap gap-3 text-[11px] font-bold">
-          <span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800">Hijau: Tidak Menunggak</span>
-          <span class="px-3 py-1 rounded-full bg-yellow-100 text-yellow-800">Kuning: Menunggak 1 Bulan</span>
-          <span class="px-3 py-1 rounded-full bg-orange-100 text-orange-800">Oranye: Menunggak 2–3 Bulan</span>
-          <span class="px-3 py-1 rounded-full bg-rose-100 text-rose-800">Merah: &gt; 3 Bulan</span>
         </div>
 
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -3976,11 +4044,10 @@
                 <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[11px]">
                   <th class="py-3 px-4">Pelanggan</th>
                   <th class="py-3 px-4">Dusun</th>
-                  <th class="py-3 px-4 text-center">Lama Tunggakan</th>
-                  <th class="py-3 px-4 text-right">Pokok Tagihan</th>
-                  <th class="py-3 px-4 text-right">Total Denda</th>
+                  <th class="py-3 px-4 text-center">Lama Menunggak</th>
+                  <th class="py-3 px-4 text-right">Pokok + Denda</th>
                   <th class="py-3 px-4 text-right">Total Tunggakan</th>
-                  <th class="py-3 px-4 text-right">Aksi &amp; Pengingat</th>
+                  <th class="py-3 px-4 text-right">Tindakan</th>
                 </tr>
               </thead>
               <tbody id="tunggakan-tbody" class="divide-y divide-slate-100"></tbody>
@@ -3995,64 +4062,56 @@
     function updateTunggakanTableBody() {
       const tbody = document.getElementById('tunggakan-tbody');
       if (!tbody) return;
-      const allTunggakan = DataHelpers.getTunggakanPerPelanggan();
       const q = tunggakanFilter.search.toLowerCase().trim();
 
-      const filtered = allTunggakan
-        .filter(t => {
-          const matchD = tunggakanFilter.dusun === 'ALL' || t.id_dusun === tunggakanFilter.dusun;
-          const matchQ = !q ||
-            String(t.nama_lengkap ?? '').toLowerCase().includes(q) ||
-            String(t.nomor_pelanggan ?? '').toLowerCase().includes(q) ||
-            String(t.nama_dusun ?? '').toLowerCase().includes(q);
-          return matchD && matchQ;
-        })
-        .sort((a, b) => {
-          if (q) {
-            const diff = DataHelpers.rankSearchScore(a.nama_lengkap, q) - DataHelpers.rankSearchScore(b.nama_lengkap, q);
-            if (diff !== 0) return diff;
-          }
-          return b.total_tunggakan - a.total_tunggakan;
-        });
+      let list = DataHelpers.getTunggakanPerPelanggan().filter(item => {
+        const matchDusun = tunggakanFilter.dusun === 'ALL' || item.id_dusun === tunggakanFilter.dusun;
+        const matchSearch = !q ||
+          item.nama_lengkap.toLowerCase().includes(q) ||
+          item.nomor_pelanggan.toLowerCase().includes(q) ||
+          item.nama_dusun.toLowerCase().includes(q);
+        return matchDusun && matchSearch;
+      });
 
-      const totalNominal = filtered.reduce((s, t) => s + t.total_tunggakan, 0);
-      const badge = document.getElementById('tunggakan-total-badge');
-      if (badge) badge.textContent = `Total Tunggakan: ${Utils.formatRupiah(totalNominal)}`;
+      list.sort((a, b) => tunggakanFilter.sort === 'asc'
+        ? a.total_tunggakan - b.total_tunggakan
+        : b.total_tunggakan - a.total_tunggakan
+      );
 
-      tbody.innerHTML = filtered.length ? filtered.map(t => {
-        let pillClass = 'bg-yellow-100 text-yellow-800';
-        if (t.jumlah_bulan >= 2 && t.jumlah_bulan <= 3) pillClass = 'bg-orange-100 text-orange-800';
-        else if (t.jumlah_bulan > 3) pillClass = 'bg-rose-100 text-rose-800';
+      tbody.innerHTML = list.length ? list.map(item => {
+        let levelBadge = 'bg-amber-100 text-amber-800';
+        if (item.jumlah_bulan > 3) levelBadge = 'bg-rose-100 text-rose-700';
+        else if (item.jumlah_bulan >= 2) levelBadge = 'bg-orange-100 text-orange-700';
 
         return `
-          <tr class="hover:bg-slate-50 transition-colors duration-75">
+          <tr class="hover:bg-slate-50">
             <td class="py-3 px-4">
-              <p class="font-bold text-slate-800">${Utils.escapeHtml(t.nama_lengkap)}</p>
-              <p class="font-mono text-[11px] text-slate-500">${t.nomor_pelanggan}</p>
+              <p class="font-bold text-slate-800">${Utils.escapeHtml(item.nama_lengkap)}</p>
+              <p class="font-mono text-[11px] text-slate-500">${Utils.escapeHtml(item.nomor_pelanggan)}</p>
             </td>
-            <td class="py-3 px-4">${Utils.escapeHtml(t.nama_dusun)}</td>
-            <td class="py-3 px-4 text-center"><span class="px-2.5 py-0.5 rounded-full font-bold ${pillClass}">${t.jumlah_bulan} Bulan</span></td>
-            <td class="py-3 px-4 text-right">${Utils.formatRupiah(t.total_pokok)}</td>
-            <td class="py-3 px-4 text-right text-rose-600 font-semibold">${Utils.formatRupiah(t.total_denda)}</td>
-            <td class="py-3 px-4 text-right font-extrabold text-rose-700">${Utils.formatRupiah(t.total_tunggakan)}</td>
+            <td class="py-3 px-4">${Utils.escapeHtml(item.nama_dusun)}</td>
+            <td class="py-3 px-4 text-center">
+              <span class="px-2.5 py-0.5 rounded-full font-bold text-[11px] ${levelBadge}">${item.jumlah_bulan} Bulan</span>
+            </td>
+            <td class="py-3 px-4 text-right text-[11px] text-slate-600">
+              Pokok: ${Utils.formatRupiah(item.total_pokok)}<br>
+              Denda: ${Utils.formatRupiah(item.total_denda)}
+            </td>
+            <td class="py-3 px-4 text-right font-extrabold text-rose-600">${Utils.formatRupiah(item.total_tunggakan)}</td>
             <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
-              <button type="button" onclick="sendWhatsAppReminder('${t.id_pelanggan}')"
-                class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold inline-flex items-center gap-1">
-                <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> Kirim WA
+              <button type="button" onclick="sendTunggakanWhatsApp('${item.id_pelanggan}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+                Kirim WA
               </button>
-              <button type="button" onclick="selectedPaymentCustomerId='${t.id_pelanggan}'; navigateTo('pembayaran')"
-                class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">
+              <button type="button" onclick="selectedPaymentCustomerId='${item.id_pelanggan}'; navigateTo('pembayaran')" class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">
                 Bayar
               </button>
             </td>
           </tr>`;
-      }).join('') : `<tr><td colspan="7" class="py-8 text-center text-emerald-600 font-bold">Tidak ada pelanggan menunggak!</td></tr>`;
-
-      refreshIcons(tbody);
+      }).join('') : `<tr><td colspan="6" class="py-8 text-center text-emerald-700 font-bold">Tidak ada pelanggan yang menunggak.</td></tr>`;
     }
 
-    function sendWhatsAppReminder(id_pelanggan) {
-      const item = DataHelpers.getTunggakanPerPelanggan().find(t => t.id_pelanggan === id_pelanggan);
+    function sendTunggakanWhatsApp(id_pelanggan) {
+      const item = DataHelpers.getTunggakanPerPelanggan().find(x => x.id_pelanggan === id_pelanggan);
       if (!item) return;
       const phone = (item.no_telepon || '').replace(/[^0-9]/g, '');
       const msg = `Assalamu'alaikum.\n` +
@@ -4064,11 +4123,10 @@
     }
 
     function exportTunggakanCSV() {
-      const rows = [['No Pelanggan', 'Nama Pelanggan', 'Dusun', 'Bulan Menunggak', 'Pokok', 'Denda', 'Total Tunggakan']];
-      DataHelpers.getTunggakanPerPelanggan().forEach(t => {
-        rows.push([t.nomor_pelanggan, t.nama_lengkap, t.nama_dusun, t.jumlah_bulan, t.total_pokok, t.total_denda, t.total_tunggakan]);
-      });
-      downloadCSV('Laporan_Tunggakan_PAM_Kalikurmo.csv', rows);
+      const list = DataHelpers.getTunggakanPerPelanggan();
+      const rows = [['No Pelanggan', 'Nama Pelanggan', 'Dusun', 'Jumlah Bulan', 'Pokok Tagihan', 'Total Denda', 'Total Tunggakan']];
+      list.forEach(x => rows.push([x.nomor_pelanggan, x.nama_lengkap, x.nama_dusun, x.jumlah_bulan, x.total_pokok, x.total_denda, x.total_tunggakan]));
+      downloadCSV(`Tunggakan_PAM_Kalikurmo_${Utils.todayISO()}.csv`, rows);
     }
 
     /**
@@ -4079,45 +4137,53 @@
     function renderKeuangan(container) {
       const editable = canManage('keuangan');
       const sum = DataHelpers.getFinancialSummary();
+      const db = AppState.db;
 
-      const unifiedLedger = [
-        ...AppState.db.pembayaran.filter(p => p.status === 'Sah').map(p => {
-          const plg = DataHelpers.getPelangganById(p.id_pelanggan);
-          return {
-            id: p.id_pembayaran,
-            tanggal: (p.tanggal_bayar || '').slice(0, 10),
-            jenis: 'Pemasukan',
-            kategori: 'Pembayaran Air (Otomatis)',
-            keterangan: `Tagihan ${p.periode} — ${plg?.nama_lengkap || p.id_pelanggan}`,
-            nominal: Number(p.jumlah_bayar),
-            petugas: p.petugas,
-            autoSynced: true
-          };
-        }),
-        ...AppState.db.pemasukanLain.map(m => ({
-          id: m.id_pemasukan,
+      const ledger = [];
+      db.pembayaran.filter(p => p.status === 'Sah').forEach(p => {
+        const plg = DataHelpers.getPelangganById(p.id_pelanggan);
+        ledger.push({
+          tanggal: (p.tanggal_bayar || '').slice(0, 10),
+          kode: p.id_pembayaran,
+          jenis: 'Pemasukan Air',
+          kategori: 'Pembayaran Rekening Air',
+          keterangan: `${plg?.nama_lengkap || p.id_pelanggan} (${p.periode})`,
+          masuk: Number(p.jumlah_bayar),
+          keluar: 0,
+          petugas: p.petugas
+        });
+      });
+
+      db.pemasukanLain.forEach(m => {
+        ledger.push({
           tanggal: m.tanggal,
-          jenis: 'Pemasukan',
+          kode: m.id_pemasukan,
+          jenis: 'Pemasukan Lain',
           kategori: m.kategori,
           keterangan: m.keterangan,
-          nominal: Number(m.nominal),
-          petugas: m.petugas,
-          autoSynced: false
-        })),
-        ...AppState.db.pengeluaran.map(k => ({
-          id: k.id_pengeluaran,
+          masuk: Number(m.nominal),
+          keluar: 0,
+          petugas: m.petugas
+        });
+      });
+
+      db.pengeluaran.forEach(k => {
+        ledger.push({
           tanggal: k.tanggal,
+          kode: k.id_pengeluaran,
           jenis: 'Pengeluaran',
           kategori: k.kategori,
-          keterangan: `${k.keterangan} (Penerima: ${k.penerima || '-'})`,
-          nominal: Number(k.nominal),
-          petugas: k.petugas,
-          autoSynced: false
-        }))
-      ].sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+          keterangan: `${k.keterangan}${k.penerima ? ' — Penerima: ' + k.penerima : ''}`,
+          masuk: 0,
+          keluar: Number(k.nominal),
+          petugas: k.petugas
+        });
+      });
+
+      ledger.sort((a, b) => String(b.tanggal).localeCompare(String(a.tanggal)));
 
       container.innerHTML = `
-        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
             <p class="text-[11px] font-bold text-slate-500 uppercase">Saldo Awal Kas</p>
             <p class="text-lg font-extrabold text-slate-800 mt-1">${Utils.formatRupiah(sum.saldoAwal)}</p>
@@ -4125,7 +4191,6 @@
           <div class="bg-purple-600 text-white p-4 rounded-2xl shadow-sm">
             <p class="text-[11px] font-bold uppercase opacity-85">Total Pemasukan</p>
             <p class="text-lg font-extrabold mt-1">${Utils.formatRupiah(sum.totalPemasukan)}</p>
-            <p class="text-[10px] opacity-80">Air: ${Utils.formatRupiah(sum.totalPemasukanAir)} | Lain: ${Utils.formatRupiah(sum.totalPemasukanLain)}</p>
           </div>
           <div class="bg-pink-600 text-white p-4 rounded-2xl shadow-sm">
             <p class="text-[11px] font-bold uppercase opacity-85">Total Pengeluaran</p>
@@ -4137,18 +4202,18 @@
           </div>
         </div>
 
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
-          <div class="flex flex-wrap gap-2">
-            ${editable ? `
-              <button type="button" onclick="openKeuanganModal('pemasukan')" class="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1.5">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+          <p class="text-slate-600">Pembayaran air dari loket otomatis masuk ke buku kas tanpa penghitungan ganda.</p>
+          ${editable ? `
+            <div class="flex flex-wrap gap-2">
+              <button type="button" onclick="openKeuanganModal('pemasukan')" class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold flex items-center gap-1.5">
                 <i data-lucide="plus-circle" class="w-4 h-4"></i> Catat Pemasukan Lain
               </button>
-              <button type="button" onclick="openKeuanganModal('pengeluaran')" class="px-4 py-2.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs flex items-center gap-1.5">
+              <button type="button" onclick="openKeuanganModal('pengeluaran')" class="px-4 py-2 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold flex items-center gap-1.5">
                 <i data-lucide="minus-circle" class="w-4 h-4"></i> Catat Pengeluaran Kas
               </button>
-            ` : ''}
-          </div>
-          <p class="text-[11px] text-slate-500">Pembayaran rekening air otomatis tercatat sebagai pemasukan tanpa duplikasi.</p>
+            </div>
+          ` : ''}
         </div>
 
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -4156,34 +4221,26 @@
             <table class="w-full text-left text-xs">
               <thead>
                 <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[11px]">
-                  <th class="py-3 px-4">Tanggal &amp; ID</th>
-                  <th class="py-3 px-4">Jenis</th>
+                  <th class="py-3 px-4">Tanggal &amp; Kode</th>
                   <th class="py-3 px-4">Kategori</th>
                   <th class="py-3 px-4">Keterangan</th>
-                  <th class="py-3 px-4 text-right">Nominal</th>
-                  <th class="py-3 px-4">Petugas</th>
+                  <th class="py-3 px-4 text-right">Pemasukan</th>
+                  <th class="py-3 px-4 text-right">Pengeluaran</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
-                ${unifiedLedger.map(row => `
+                ${ledger.length ? ledger.map(row => `
                   <tr class="hover:bg-slate-50">
                     <td class="py-3 px-4">
                       <p class="font-bold text-slate-800">${Utils.formatTanggal(row.tanggal)}</p>
-                      <p class="font-mono text-[10px] text-slate-500">${row.id}</p>
-                    </td>
-                    <td class="py-3 px-4">
-                      <span class="px-2.5 py-0.5 rounded-full font-bold text-[11px] ${row.jenis === 'Pemasukan' ? 'bg-purple-100 text-purple-700' : 'bg-pink-100 text-pink-700'}">
-                        ${row.jenis}
-                      </span>
+                      <p class="font-mono text-[10px] text-slate-400">${Utils.escapeHtml(row.kode)}</p>
                     </td>
                     <td class="py-3 px-4 font-semibold">${Utils.escapeHtml(row.kategori)}</td>
                     <td class="py-3 px-4 text-slate-600">${Utils.escapeHtml(row.keterangan)}</td>
-                    <td class="py-3 px-4 text-right font-extrabold ${row.jenis === 'Pemasukan' ? 'text-purple-700' : 'text-pink-600'}">
-                      ${row.jenis === 'Pemasukan' ? '+' : '-'}${Utils.formatRupiah(row.nominal)}
-                    </td>
-                    <td class="py-3 px-4 text-slate-500">${Utils.escapeHtml(row.petugas)}</td>
+                    <td class="py-3 px-4 text-right font-extrabold text-purple-700">${row.masuk > 0 ? Utils.formatRupiah(row.masuk) : '-'}</td>
+                    <td class="py-3 px-4 text-right font-extrabold text-pink-600">${row.keluar > 0 ? Utils.formatRupiah(row.keluar) : '-'}</td>
                   </tr>
-                `).join('')}
+                `).join('') : `<tr><td colspan="5" class="py-8 text-center text-slate-400">Belum ada catatan transaksi kas.</td></tr>`}
               </tbody>
             </table>
           </div>
@@ -4193,43 +4250,43 @@
 
     function openKeuanganModal(tipe) {
       if (!requireUnlockedAction('keuangan')) return;
-      const isIn = tipe === 'pemasukan';
-      const categories = isIn
-        ? ['Pemasangan sambungan baru', 'Administrasi', 'Pendapatan lainnya']
-        : ['Pembelian pipa', 'Pembelian perlengkapan', 'Listrik pompa', 'Perawatan mesin', 'Perbaikan jaringan', 'Honor petugas', 'Biaya operasional', 'Pengeluaran lainnya'];
+      const isMasuk = tipe === 'pemasukan';
+      const categories = isMasuk
+        ? ['Pemasangan Sambungan Baru', 'Administrasi', 'Bantuan / Hibah Desa', 'Pendapatan Lainnya']
+        : ['Pembelian Pipa', 'Pembelian Perlengkapan', 'Listrik Pompa', 'Perawatan Mesin', 'Perbaikan Jaringan', 'Honor Petugas', 'Biaya Operasional', 'Pengeluaran Lainnya'];
 
-      openAppModal(isIn ? 'Catat Pemasukan Non-Tagihan Air' : 'Catat Pengeluaran Kas PAM', `
+      openAppModal(isMasuk ? 'Catat Pemasukan Kas Lainnya' : 'Catat Pengeluaran Kas PAM', `
         <form id="form-keuangan" class="space-y-4 text-xs">
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block font-bold text-slate-600 mb-1">Tanggal Transaksi *</label>
               <input type="date" id="keu-tgl" required value="${Utils.todayISO()}" class="w-full px-3 py-2.5 rounded-xl border border-slate-300" />
             </div>
             <div>
               <label class="block font-bold text-slate-600 mb-1">Kategori *</label>
-              <select id="keu-kat" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white">
+              <select id="keu-kat" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold">
                 ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
               </select>
             </div>
-          </div>
-          <div>
-            <label class="block font-bold text-slate-600 mb-1">Nominal (Rp) *</label>
-            <input type="number" id="keu-nom" required min="1" placeholder="Contoh: 250000" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono font-extrabold text-sm" />
-          </div>
-          <div>
-            <label class="block font-bold text-slate-600 mb-1">${isIn ? 'Penyetor / Sumber Dana' : 'Penerima Pembayaran / Toko'} *</label>
-            <input type="text" id="keu-penerima" required placeholder="Nama pihak terkait" class="w-full px-3 py-2.5 rounded-xl border border-slate-300" />
-          </div>
-          <div>
-            <label class="block font-bold text-slate-600 mb-1">Keterangan / Uraian Transaksi *</label>
-            <input type="text" id="keu-ket" required placeholder="Rincian kebutuhan atau bukti nota..." class="w-full px-3 py-2.5 rounded-xl border border-slate-300" />
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">Nominal (Rp) *</label>
+              <input type="number" id="keu-nom" required min="1" placeholder="Contoh: 150000" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono font-extrabold" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">${isMasuk ? 'Penyetor / Sumber' : 'Penerima / Toko'}</label>
+              <input type="text" id="keu-penerima" placeholder="${isMasuk ? 'Nama penyetor...' : 'Nama toko / penerima...'}" class="w-full px-3 py-2.5 rounded-xl border border-slate-300" />
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block font-bold text-slate-600 mb-1">Keterangan Rinci *</label>
+              <input type="text" id="keu-ket" required placeholder="Uraian transaksi keuangan..." class="w-full px-3 py-2.5 rounded-xl border border-slate-300" />
+            </div>
           </div>
           <div class="flex justify-end gap-2 pt-2">
             <button type="button" onclick="closeAppModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 font-semibold">Batal</button>
-            <button type="submit" class="px-5 py-2.5 rounded-xl ${isIn ? 'bg-purple-600 hover:bg-purple-700' : 'bg-pink-600 hover:bg-pink-700'} text-white font-bold">Simpan Transaksi</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl ${isMasuk ? 'bg-purple-600 hover:bg-purple-700' : 'bg-pink-600 hover:bg-pink-700'} text-white font-bold">Simpan Transaksi</button>
           </div>
         </form>
-      `, 'max-w-lg');
+      `);
 
       document.getElementById('form-keuangan').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -4246,330 +4303,362 @@
         });
         closeAppModal();
         renderCurrentPage();
-        Utils.toast('success', 'Transaksi Keuangan Tercatat');
+        Utils.toast('success', 'Transaksi Kas Berhasil Disimpan');
       });
     }
 
     /**
      * =========================================================================
-     * MODULE 14: LAPORAN ADMINISTRASI & KEUANGAN (10 JENIS LAPORAN + TTD)
+     * MODULE 14: LAPORAN KEUANGAN & ADMINISTRASI (DENGAN DOWNLOAD PDF LANGSUNG)
      * =========================================================================
      */
     let laporanState = {
-      jenis: 'pembayaran_bulanan',
-      tglAwal: `${Utils.currentPeriode()}-01`,
+      jenis: 'saldo_kas',
+      tglAwal: `${new Date().getFullYear()}-01-01`,
       tglAkhir: Utils.todayISO(),
-      periode: Utils.currentPeriode(),
       dusun: 'ALL'
     };
 
-    function renderLaporan(container) {
-      const sortedDusun = [...AppState.db.dusun].sort((a, b) => a.urutan - b.urutan);
-      const reportTypes = [
-        { id: 'pembayaran_harian', label: '1. Laporan Pembayaran Harian' },
-        { id: 'pembayaran_bulanan', label: '2. Laporan Pembayaran Bulanan' },
-        { id: 'pembayaran_tahunan', label: '3. Laporan Pembayaran Tahunan' },
-        { id: 'pemasukan', label: '4. Laporan Pemasukan Kas' },
-        { id: 'pengeluaran', label: '5. Laporan Pengeluaran Kas' },
-        { id: 'saldo_kas', label: '6. Laporan Rekapitulasi Saldo Kas' },
-        { id: 'tunggakan', label: '7. Laporan Tunggakan Pelanggan' },
-        { id: 'pemakaian_air', label: '8. Laporan Pemakaian Air (m³)' },
-        { id: 'pelanggan_status', label: '9. Laporan Pelanggan Aktif & Nonaktif' },
-        { id: 'per_dusun', label: '10. Laporan Rekapitulasi Per Dusun' }
-      ];
+    function getLaporanDataset() {
+      const db = AppState.db;
+      const sum = DataHelpers.getFinancialSummary();
+      const { jenis, tglAwal, tglAkhir, dusun } = laporanState;
+      const inRange = (dt) => {
+        const d = String(dt || '').slice(0, 10);
+        if (!d) return true;
+        return (!tglAwal || d >= tglAwal) && (!tglAkhir || d <= tglAkhir);
+      };
 
-      const { headers, rows, summaryText } = buildReportDataset();
+      switch (jenis) {
+        case 'pembayaran_harian':
+        case 'pembayaran_bulanan':
+        case 'pembayaran_tahunan': {
+          const rows = db.pembayaran
+            .filter(p => p.status === 'Sah' && inRange(p.tanggal_bayar))
+            .filter(p => {
+              if (dusun === 'ALL') return true;
+              const plg = DataHelpers.getPelangganById(p.id_pelanggan);
+              return plg?.id_dusun === dusun;
+            })
+            .map(p => {
+              const plg = DataHelpers.getPelangganById(p.id_pelanggan);
+              return [
+                Utils.formatDateTime(p.tanggal_bayar),
+                p.id_pembayaran,
+                plg?.nama_lengkap || p.id_pelanggan,
+                DataHelpers.getDusunName(plg?.id_dusun),
+                p.periode,
+                Utils.formatRupiah(p.jumlah_bayar)
+              ];
+            });
+          return {
+            subtitle: 'Laporan Penerimaan Pembayaran Air Pelanggan',
+            headers: ['Tanggal', 'No. Transaksi', 'Nama Pelanggan', 'Dusun', 'Periode', 'Nominal'],
+            rows
+          };
+        }
+
+        case 'pemasukan': {
+          const rows = [];
+          db.pembayaran.filter(p => p.status === 'Sah' && inRange(p.tanggal_bayar)).forEach(p => {
+            const plg = DataHelpers.getPelangganById(p.id_pelanggan);
+            rows.push([String(p.tanggal_bayar).slice(0, 10), 'Pembayaran Air', `${plg?.nama_lengkap || p.id_pelanggan} (${p.periode})`, Utils.formatRupiah(p.jumlah_bayar)]);
+          });
+          db.pemasukanLain.filter(m => inRange(m.tanggal)).forEach(m => {
+            rows.push([m.tanggal, m.kategori, m.keterangan, Utils.formatRupiah(m.nominal)]);
+          });
+          return {
+            subtitle: 'Laporan Rekapitulasi Pemasukan Kas PAM',
+            headers: ['Tanggal', 'Kategori', 'Keterangan', 'Nominal Pemasukan'],
+            rows
+          };
+        }
+
+        case 'pengeluaran': {
+          const rows = db.pengeluaran.filter(k => inRange(k.tanggal)).map(k => [
+            k.tanggal, k.kategori, k.keterangan, k.penerima || '-', Utils.formatRupiah(k.nominal)
+          ]);
+          return {
+            subtitle: 'Laporan Pengeluaran Kas Operasional PAM',
+            headers: ['Tanggal', 'Kategori', 'Keterangan', 'Penerima', 'Nominal Pengeluaran'],
+            rows
+          };
+        }
+
+        case 'tunggakan': {
+          const rows = DataHelpers.getTunggakanPerPelanggan()
+            .filter(x => dusun === 'ALL' || x.id_dusun === dusun)
+            .map(x => [x.nomor_pelanggan, x.nama_lengkap, x.nama_dusun, `${x.jumlah_bulan} Bulan`, Utils.formatRupiah(x.total_tunggakan)]);
+          return {
+            subtitle: 'Laporan Tunggakan Rekening Air Pelanggan',
+            headers: ['No. Pelanggan', 'Nama Pelanggan', 'Dusun', 'Lama Menunggak', 'Total Tunggakan'],
+            rows
+          };
+        }
+
+        case 'pemakaian_air': {
+          const rows = db.meterAir
+            .filter(m => inRange(m.tanggal_catat))
+            .filter(m => {
+              if (dusun === 'ALL') return true;
+              const plg = DataHelpers.getPelangganById(m.id_pelanggan);
+              return plg?.id_dusun === dusun;
+            })
+            .map(m => {
+              const plg = DataHelpers.getPelangganById(m.id_pelanggan);
+              return [m.periode, plg?.nama_lengkap || m.id_pelanggan, DataHelpers.getDusunName(plg?.id_dusun), m.meter_sebelumnya, m.meter_sekarang, `${m.pemakaian} m³`];
+            });
+          return {
+            subtitle: 'Laporan Pemakaian Air Pelanggan (m³)',
+            headers: ['Periode', 'Nama Pelanggan', 'Dusun', 'Meter Lalu', 'Meter Kini', 'Pemakaian'],
+            rows
+          };
+        }
+
+        case 'pelanggan_status': {
+          const rows = db.pelanggan
+            .filter(p => dusun === 'ALL' || p.id_dusun === dusun)
+            .map(p => [p.nomor_pelanggan, p.nama_lengkap, DataHelpers.getDusunName(p.id_dusun), p.golongan, p.status]);
+          return {
+            subtitle: 'Laporan Status Pelanggan Aktif & Nonaktif',
+            headers: ['No. Pelanggan', 'Nama Lengkap', 'Dusun', 'Golongan', 'Status'],
+            rows
+          };
+        }
+
+        case 'per_dusun': {
+          const sortedDusun = [...db.dusun].sort((a, b) => a.urutan - b.urutan);
+          const rows = sortedDusun.map(d => {
+            const plgIds = new Set(db.pelanggan.filter(p => p.id_dusun === d.id_dusun).map(p => p.id_pelanggan));
+            const bayarDusun = db.pembayaran
+              .filter(p => p.status === 'Sah' && plgIds.has(p.id_pelanggan))
+              .reduce((s, p) => s + Number(p.jumlah_bayar), 0);
+            const tunggakDusun = db.tagihan
+              .filter(t => t.status !== 'Lunas' && t.status !== 'Dibatalkan' && plgIds.has(t.id_pelanggan))
+              .reduce((s, t) => s + Number(t.sisa_tagihan), 0);
+            return [d.nama_dusun, `${plgIds.size} Pelanggan`, Utils.formatRupiah(bayarDusun), Utils.formatRupiah(tunggakDusun)];
+          });
+          return {
+            subtitle: 'Laporan Rekapitulasi Administrasi & Keuangan per Dusun',
+            headers: ['Nama Dusun', 'Jumlah Pelanggan', 'Total Pembayaran Masuk', 'Total Tunggakan'],
+            rows
+          };
+        }
+
+        case 'saldo_kas':
+        default: {
+          return {
+            subtitle: 'Laporan Posisi Saldo Kas PAM Desa Kalikurmo',
+            headers: ['Uraian Komponen Keuangan', 'Jumlah (Rp)'],
+            rows: [
+              ['Saldo Awal Kas Pembukuan', Utils.formatRupiah(sum.saldoAwal)],
+              ['Total Pemasukan Pembayaran Air Pelanggan', Utils.formatRupiah(sum.totalPemasukanAir)],
+              ['Total Pemasukan Kas Lainnya', Utils.formatRupiah(sum.totalPemasukanLain)],
+              ['Jumlah Total Pemasukan', Utils.formatRupiah(sum.totalPemasukan)],
+              ['Total Pengeluaran Operasional & Perawatan', Utils.formatRupiah(sum.totalPengeluaran)],
+              ['SALDO AKHIR KAS PAM DESA KALIKURMO', Utils.formatRupiah(sum.saldoKas)]
+            ]
+          };
+        }
+      }
+    }
+
+    function renderLaporan(container) {
+      const cfg = AppState.db.pengaturan;
+      const sortedDusun = [...AppState.db.dusun].sort((a, b) => a.urutan - b.urutan);
+      const ds = getLaporanDataset();
 
       container.innerHTML = `
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-end justify-between gap-3 text-xs">
+          <div class="flex flex-wrap items-end gap-2.5">
             <div>
-              <label class="block font-bold text-slate-600 mb-1">Jenis Laporan</label>
-              <select onchange="laporanState.jenis=this.value; renderCurrentPage()" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold">
-                ${reportTypes.map(r => `<option value="${r.id}" ${laporanState.jenis === r.id ? 'selected' : ''}>${r.label}</option>`).join('')}
+              <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Jenis Laporan</label>
+              <select onchange="laporanState.jenis=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white font-bold">
+                <option value="saldo_kas" ${laporanState.jenis === 'saldo_kas' ? 'selected' : ''}>6. Laporan Saldo Kas</option>
+                <option value="pembayaran_harian" ${laporanState.jenis === 'pembayaran_harian' ? 'selected' : ''}>1. Pembayaran Harian</option>
+                <option value="pembayaran_bulanan" ${laporanState.jenis === 'pembayaran_bulanan' ? 'selected' : ''}>2. Pembayaran Bulanan</option>
+                <option value="pembayaran_tahunan" ${laporanState.jenis === 'pembayaran_tahunan' ? 'selected' : ''}>3. Pembayaran Tahunan</option>
+                <option value="pemasukan" ${laporanState.jenis === 'pemasukan' ? 'selected' : ''}>4. Laporan Pemasukan</option>
+                <option value="pengeluaran" ${laporanState.jenis === 'pengeluaran' ? 'selected' : ''}>5. Laporan Pengeluaran</option>
+                <option value="tunggakan" ${laporanState.jenis === 'tunggakan' ? 'selected' : ''}>7. Laporan Tunggakan</option>
+                <option value="pemakaian_air" ${laporanState.jenis === 'pemakaian_air' ? 'selected' : ''}>8. Laporan Pemakaian Air</option>
+                <option value="pelanggan_status" ${laporanState.jenis === 'pelanggan_status' ? 'selected' : ''}>9. Pelanggan Aktif &amp; Nonaktif</option>
+                <option value="per_dusun" ${laporanState.jenis === 'per_dusun' ? 'selected' : ''}>10. Laporan per Dusun</option>
               </select>
             </div>
             <div>
-              <label class="block font-bold text-slate-600 mb-1">Periode Bulan</label>
-              <input type="month" value="${laporanState.periode}" onchange="laporanState.periode=this.value; renderCurrentPage()" class="w-full px-3 py-2.5 rounded-xl border border-slate-300" />
+              <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tanggal Awal</label>
+              <input type="date" value="${laporanState.tglAwal}" onchange="laporanState.tglAwal=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300" />
             </div>
             <div>
-              <label class="block font-bold text-slate-600 mb-1">Tanggal Awal - Akhir</label>
-              <div class="flex gap-1">
-                <input type="date" value="${laporanState.tglAwal}" onchange="laporanState.tglAwal=this.value; renderCurrentPage()" class="w-1/2 px-2 py-2 rounded-xl border border-slate-300 text-[11px]" />
-                <input type="date" value="${laporanState.tglAkhir}" onchange="laporanState.tglAkhir=this.value; renderCurrentPage()" class="w-1/2 px-2 py-2 rounded-xl border border-slate-300 text-[11px]" />
-              </div>
+              <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tanggal Akhir</label>
+              <input type="date" value="${laporanState.tglAkhir}" onchange="laporanState.tglAkhir=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300" />
             </div>
             <div>
-              <label class="block font-bold text-slate-600 mb-1">Filter Dusun</label>
-              <select onchange="laporanState.dusun=this.value; renderCurrentPage()" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white">
+              <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Dusun</label>
+              <select onchange="laporanState.dusun=this.value; renderCurrentPage()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white">
                 <option value="ALL">Semua Dusun</option>
                 ${sortedDusun.map(d => `<option value="${d.id_dusun}" ${laporanState.dusun === d.id_dusun ? 'selected' : ''}>${Utils.escapeHtml(d.nama_dusun)}</option>`).join('')}
               </select>
             </div>
           </div>
 
-          <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-100 text-xs">
-            <button type="button" onclick="printOfficialReport()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold flex items-center gap-1.5">
-              <i data-lucide="printer" class="w-4 h-4"></i> Cetak Laporan
-            </button>
-            <button type="button" onclick="printOfficialReport()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1.5">
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" onclick="downloadLaporanPDF()" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1.5 shadow-sm">
               <i data-lucide="file-down" class="w-4 h-4"></i> Download PDF
             </button>
-            <button type="button" onclick="exportCurrentReportExcel()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5">
-              <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export Excel (.xls)
+            <button type="button" onclick="exportLaporanCSV()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+              Export Excel / CSV
             </button>
-            <button type="button" onclick="exportCurrentReportCSV()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center gap-1.5">
-              <i data-lucide="download" class="w-4 h-4"></i> Export CSV
+            <button type="button" onclick="printLaporanResmi()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold flex items-center gap-1.5">
+              <i data-lucide="printer" class="w-4 h-4"></i> Cetak Laporan
             </button>
           </div>
         </div>
 
-        <div id="official-report-preview" class="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+        <!-- Dokumen Laporan Resmi -->
+        <div id="laporan-document-card" class="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6 text-xs">
           <div class="text-center border-b-2 border-slate-800 pb-4">
-            <h3 class="text-base sm:text-lg font-extrabold uppercase tracking-wide text-slate-900">LAPORAN ADMINISTRASI DAN KEUANGAN PAM DESA KALIKURMO</h3>
-            <p class="text-xs text-slate-600 mt-1">${Utils.escapeHtml(AppState.db.pengaturan.alamat_kantor)} • Telp: ${Utils.escapeHtml(AppState.db.pengaturan.no_telepon)}</p>
-            <p class="text-xs font-bold text-blue-700 mt-2 uppercase">${reportTypes.find(r => r.id === laporanState.jenis)?.label || ''} — Periode ${Utils.formatPeriode(laporanState.periode)}</p>
+            <h3 class="text-base sm:text-lg font-extrabold text-slate-900 uppercase">LAPORAN ADMINISTRASI DAN KEUANGAN PAM DESA KALIKURMO</h3>
+            <p class="font-bold text-blue-800 mt-1">${Utils.escapeHtml(ds.subtitle)}</p>
+            <p class="text-[11px] text-slate-500 mt-0.5">${Utils.escapeHtml(cfg.alamat_kantor)} • Dicetak pada ${Utils.formatTanggal(Utils.todayISO())}</p>
           </div>
 
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse border border-slate-300 text-xs">
               <thead>
                 <tr class="bg-slate-100 text-slate-800">
-                  ${headers.map(h => `<th class="border border-slate-300 p-2.5 font-bold">${h}</th>`).join('')}
+                  ${ds.headers.map(h => `<th class="border border-slate-300 py-2.5 px-3 font-extrabold">${Utils.escapeHtml(h)}</th>`).join('')}
                 </tr>
               </thead>
               <tbody>
-                ${rows.length ? rows.map(r => `
+                ${ds.rows.length ? ds.rows.map(r => `
                   <tr>
-                    ${r.map(cell => `<td class="border border-slate-300 p-2.5">${cell}</td>`).join('')}
+                    ${r.map(c => `<td class="border border-slate-300 py-2 px-3">${Utils.escapeHtml(c)}</td>`).join('')}
                   </tr>
-                `).join('') : `<tr><td colspan="${headers.length}" class="border border-slate-300 p-6 text-center text-slate-400">Tidak ada data untuk filter laporan ini.</td></tr>`}
+                `).join('') : `<tr><td colspan="${ds.headers.length}" class="border border-slate-300 py-6 text-center text-slate-400">Tidak ada data pada periode filter ini.</td></tr>`}
               </tbody>
             </table>
           </div>
 
-          ${summaryText ? `<div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs font-bold text-slate-800">${summaryText}</div>` : ''}
-
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-8 text-center text-xs">
+          <!-- Blok Tanda Tangan -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-8 text-center">
             <div>
               <p class="text-slate-600">Mengetahui,</p>
               <p class="font-bold text-slate-800">Kepala Desa Kalikurmo</p>
               <div class="h-16"></div>
-              <p class="font-extrabold underline">${Utils.escapeHtml(AppState.db.pengaturan.kepala_desa)}</p>
+              <p class="font-extrabold underline text-slate-900">${Utils.escapeHtml(cfg.kepala_desa)}</p>
             </div>
             <div>
-              <p class="text-slate-600">Disetujui Oleh,</p>
+              <p class="text-slate-600">Ketua Pengelola,</p>
               <p class="font-bold text-slate-800">Ketua PAM Desa Kalikurmo</p>
               <div class="h-16"></div>
-              <p class="font-extrabold underline">${Utils.escapeHtml(AppState.db.pengaturan.ketua_pam)}</p>
+              <p class="font-extrabold underline text-slate-900">${Utils.escapeHtml(cfg.ketua_pam)}</p>
             </div>
             <div>
               <p class="text-slate-600">Kalikurmo, ${Utils.formatTanggal(Utils.todayISO())}</p>
               <p class="font-bold text-slate-800">Bendahara PAM Desa</p>
               <div class="h-16"></div>
-              <p class="font-extrabold underline">${Utils.escapeHtml(AppState.db.pengaturan.bendahara_pam)}</p>
+              <p class="font-extrabold underline text-slate-900">${Utils.escapeHtml(cfg.bendahara_pam)}</p>
             </div>
           </div>
         </div>
       `;
     }
 
-    function buildReportDataset() {
-      const db = AppState.db;
-      const filterDusun = (id_dusun) => laporanState.dusun === 'ALL' || id_dusun === laporanState.dusun;
+    async function downloadLaporanPDF() {
+      const docEl = document.getElementById('laporan-document-card');
+      if (!docEl) return;
 
-      switch (laporanState.jenis) {
-        case 'pembayaran_harian':
-        case 'pembayaran_bulanan':
-        case 'pembayaran_tahunan': {
-          const yearPrefix = laporanState.periode.slice(0, 4);
-          const list = db.pembayaran.filter(p => {
-            if (p.status !== 'Sah') return false;
-            const plg = DataHelpers.getPelangganById(p.id_pelanggan);
-            if (!filterDusun(plg?.id_dusun)) return false;
-            const tgl = (p.tanggal_bayar || '').slice(0, 10);
-            if (laporanState.jenis === 'pembayaran_harian') return tgl >= laporanState.tglAwal && tgl <= laporanState.tglAkhir;
-            if (laporanState.jenis === 'pembayaran_bulanan') return tgl.startsWith(laporanState.periode);
-            return tgl.startsWith(yearPrefix);
-          });
-          const total = list.reduce((s, p) => s + Number(p.jumlah_bayar), 0);
-          return {
-            headers: ['No', 'No. Transaksi', 'Tanggal', 'Pelanggan', 'Dusun', 'Metode', 'Jumlah Bayar'],
-            rows: list.map((p, i) => {
-              const plg = DataHelpers.getPelangganById(p.id_pelanggan);
-              return [i + 1, p.id_pembayaran, Utils.formatTanggal(p.tanggal_bayar), plg?.nama_lengkap || '-', DataHelpers.getDusunName(plg?.id_dusun), p.metode, Utils.formatRupiah(p.jumlah_bayar)];
-            }),
-            summaryText: `Total Penerimaan Pembayaran: ${Utils.formatRupiah(total)} (${list.length} transaksi)`
-          };
-        }
-
-        case 'pemasukan': {
-          const sum = DataHelpers.getFinancialSummary();
-          const rows = [
-            [1, 'Pembayaran Rekening Air Pelanggan (Terintegrasi)', Utils.formatRupiah(sum.totalPemasukanAir)],
-            ...db.pemasukanLain.map((m, i) => [i + 2, `${m.kategori} — ${m.keterangan} (${Utils.formatTanggal(m.tanggal)})`, Utils.formatRupiah(m.nominal)])
-          ];
-          return {
-            headers: ['No', 'Sumber Pemasukan', 'Nominal'],
-            rows,
-            summaryText: `Total Seluruh Pemasukan: ${Utils.formatRupiah(sum.totalPemasukan)}`
-          };
-        }
-
-        case 'pengeluaran': {
-          const total = db.pengeluaran.reduce((s, k) => s + Number(k.nominal), 0);
-          return {
-            headers: ['No', 'Tanggal', 'Kategori', 'Keterangan', 'Penerima', 'Nominal'],
-            rows: db.pengeluaran.map((k, i) => [i + 1, Utils.formatTanggal(k.tanggal), k.kategori, k.keterangan, k.penerima || '-', Utils.formatRupiah(k.nominal)]),
-            summaryText: `Total Pengeluaran Kas: ${Utils.formatRupiah(total)}`
-          };
-        }
-
-        case 'saldo_kas': {
-          const sum = DataHelpers.getFinancialSummary();
-          return {
-            headers: ['Komponen Keuangan', 'Keterangan', 'Jumlah (Rp)'],
-            rows: [
-              ['Saldo Awal Kas', 'Modal awal pembukuan', Utils.formatRupiah(sum.saldoAwal)],
-              ['(+) Pemasukan Pembayaran Air', 'Seluruh transaksi sah pelanggan', Utils.formatRupiah(sum.totalPemasukanAir)],
-              ['(+) Pemasukan Non-Air', 'Pemasangan baru, administrasi, dll', Utils.formatRupiah(sum.totalPemasukanLain)],
-              ['(-) Total Pengeluaran', 'Operasional, listrik pompa, perawatan', `(${Utils.formatRupiah(sum.totalPengeluaran)})`],
-              ['SALDO AKHIR KAS', 'Saldo Awal + Total Pemasukan - Total Pengeluaran', `<strong>${Utils.formatRupiah(sum.saldoKas)}</strong>`]
-            ],
-            summaryText: `Saldo Kas Bersih PAM Desa Kalikurmo: ${Utils.formatRupiah(sum.saldoKas)}`
-          };
-        }
-
-        case 'tunggakan': {
-          const list = DataHelpers.getTunggakanPerPelanggan().filter(t => filterDusun(t.id_dusun));
-          const total = list.reduce((s, t) => s + t.total_tunggakan, 0);
-          return {
-            headers: ['No', 'No. Pelanggan', 'Nama Pelanggan', 'Dusun', 'Bulan', 'Pokok', 'Denda', 'Total Tunggakan'],
-            rows: list.map((t, i) => [i + 1, t.nomor_pelanggan, t.nama_lengkap, t.nama_dusun, `${t.jumlah_bulan} bln`, Utils.formatRupiah(t.total_pokok), Utils.formatRupiah(t.total_denda), Utils.formatRupiah(t.total_tunggakan)]),
-            summaryText: `Total Piutang / Tunggakan Pelanggan: ${Utils.formatRupiah(total)}`
-          };
-        }
-
-        case 'pemakaian_air': {
-          const list = db.meterAir.filter(m => {
-            const p = DataHelpers.getPelangganById(m.id_pelanggan);
-            return m.periode === laporanState.periode && filterDusun(p?.id_dusun);
-          });
-          const totalM3 = list.reduce((s, m) => s + Number(m.pemakaian), 0);
-          return {
-            headers: ['No', 'Pelanggan', 'Dusun', 'Meter Awal', 'Meter Akhir', 'Pemakaian (m³)'],
-            rows: list.map((m, i) => {
-              const p = DataHelpers.getPelangganById(m.id_pelanggan);
-              return [i + 1, `${p?.nama_lengkap || '-'} (${p?.nomor_pelanggan || '-'})`, DataHelpers.getDusunName(p?.id_dusun), m.meter_sebelumnya, m.meter_sekarang, `${m.pemakaian} m³`];
-            }),
-            summaryText: `Total Distribusi Pemakaian Air Periode ${Utils.formatPeriode(laporanState.periode)}: ${totalM3} m³`
-          };
-        }
-
-        case 'pelanggan_status': {
-          const list = db.pelanggan.filter(p => filterDusun(p.id_dusun));
-          return {
-            headers: ['No', 'No. Pelanggan', 'Nama Lengkap', 'Dusun', 'Golongan', 'Status'],
-            rows: list.map((p, i) => [i + 1, p.nomor_pelanggan, p.nama_lengkap, DataHelpers.getDusunName(p.id_dusun), p.golongan, p.status]),
-            summaryText: `Total Pelanggan: ${list.length} (Aktif: ${list.filter(p => p.status === 'Aktif').length}, Nonaktif/Diputus: ${list.filter(p => p.status !== 'Aktif').length})`
-          };
-        }
-
-        case 'per_dusun': {
-          const sortedDusun = [...db.dusun].sort((a, b) => a.urutan - b.urutan);
-          const tunggakanList = DataHelpers.getTunggakanPerPelanggan();
-          return {
-            headers: ['No', 'Nama Dusun', 'Status', 'Jml Pelanggan', 'Total Pembayaran', 'Total Tunggakan'],
-            rows: sortedDusun.map((d, i) => {
-              const plgs = db.pelanggan.filter(p => p.id_dusun === d.id_dusun);
-              const ids = new Set(plgs.map(p => p.id_pelanggan));
-              const bayar = db.pembayaran.filter(pb => pb.status === 'Sah' && ids.has(pb.id_pelanggan)).reduce((s, pb) => s + Number(pb.jumlah_bayar), 0);
-              const tunggak = tunggakanList.filter(t => t.id_dusun === d.id_dusun).reduce((s, t) => s + t.total_tunggakan, 0);
-              return [i + 1, d.nama_dusun, d.aktif ? 'Aktif' : 'Nonaktif', plgs.length, Utils.formatRupiah(bayar), Utils.formatRupiah(tunggak)];
-            }),
-            summaryText: `Rekapitulasi Seluruh Wilayah Dusun Desa Kalikurmo`
-          };
-        }
+      if (typeof html2canvas === 'undefined' || !window.jspdf || !window.jspdf.jsPDF) {
+        Utils.toast('error', 'Gagal Memuat Generator PDF', 'Periksa koneksi internet Anda lalu muat ulang halaman.');
+        return;
       }
-      return { headers: [], rows: [], summaryText: '' };
+
+      try {
+        Utils.toast('info', 'Membuat Laporan PDF...', 'Mohon tunggu sebentar.');
+        const canvas = await html2canvas(docEl, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          logging: false
+        });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 10;
+        const usableWidth = pageWidth - margin * 2;
+        const imgHeight = (canvas.height * usableWidth) / canvas.width;
+
+        let heightLeft = imgHeight;
+        let position = margin;
+
+        pdf.addImage(imgData, 'PNG', margin, position, usableWidth, imgHeight);
+        heightLeft -= (pageHeight - margin * 2);
+
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight + margin;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', margin, position, usableWidth, imgHeight);
+          heightLeft -= (pageHeight - margin * 2);
+        }
+
+        const filename = `Laporan_PAM_Kalikurmo_${laporanState.jenis}_${Utils.todayISO()}.pdf`;
+        pdf.save(filename);
+        Utils.toast('success', 'Laporan PDF Terunduh', filename);
+      } catch (err) {
+        Utils.toast('error', 'Gagal Membuat Laporan PDF', err.message || 'Terjadi kesalahan saat mengunduh PDF.');
+      }
     }
 
-    function printOfficialReport() {
-      const preview = document.getElementById('official-report-preview');
-      if (!preview) return;
+    function exportLaporanCSV() {
+      const ds = getLaporanDataset();
+      downloadCSV(`Laporan_PAM_Kalikurmo_${laporanState.jenis}_${Utils.todayISO()}.csv`, [ds.headers, ...ds.rows]);
+    }
+
+    function printLaporanResmi() {
+      const docEl = document.getElementById('laporan-document-card');
+      if (!docEl) return;
       const area = document.getElementById('print-area');
       area.classList.remove('hidden');
-      area.innerHTML = preview.innerHTML;
+      area.innerHTML = docEl.outerHTML;
       setTimeout(() => {
         window.print();
         area.classList.add('hidden');
       }, 150);
     }
 
-    function exportCurrentReportCSV() {
-      const { headers, rows } = buildReportDataset();
-      const cleanRows = [headers, ...rows.map(r => r.map(c => String(c).replace(/<[^>]+>/g, '')))];
-      downloadCSV(`Laporan_PAM_Kalikurmo_${laporanState.jenis}.csv`, cleanRows);
-    }
-
-    function exportCurrentReportExcel() {
-      const preview = document.getElementById('official-report-preview');
-      if (!preview) return;
-      const blob = new Blob([`\ufeff<html><head><meta charset="utf-8"></head><body>${preview.innerHTML}</body></html>`], {
-        type: 'application/vnd.ms-excel'
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Laporan_PAM_Kalikurmo_${laporanState.jenis}.xls`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
-    function downloadCSV(filename, rows) {
-      const csv = rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
     /**
      * =========================================================================
-     * MODULE 15: MANAJEMEN DUSUN (ID PERMANEN & REKAP PER DUSUN)
+     * MODULE 15: MANAJEMEN DUSUN (BERBASIS ID PERMANEN)
      * =========================================================================
      */
     function renderDusun(container) {
       const editable = canManage('dusun');
-      const sortedDusun = [...AppState.db.dusun].sort((a, b) => a.urutan - b.urutan);
-      const tunggakanList = DataHelpers.getTunggakanPerPelanggan();
+      const db = AppState.db;
+      const sortedDusun = [...db.dusun].sort((a, b) => Number(a.urutan) - Number(b.urutan));
 
       container.innerHTML = `
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 class="font-extrabold text-slate-800 text-base">Pengelolaan Wilayah Dusun Desa Kalikurmo</h3>
-              <p class="text-xs text-slate-500">Setiap dusun menggunakan ID permanen (<code>DSN-xxx</code>). Mengubah nama dusun akan otomatis memperbarui seluruh tampilan tanpa merusak riwayat transaksi lama.</p>
-            </div>
-            ${editable ? `
-              <button type="button" onclick="openDusunModal()" class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm">
-                <i data-lucide="plus" class="w-4 h-4"></i> Tambah Dusun Baru
-              </button>
-            ` : ''}
-          </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+          <p class="text-slate-600">Setiap dusun menggunakan <strong>ID Permanen</strong> sehingga mengubah nama dusun tidak merusak riwayat pelanggan maupun tagihan lama.</p>
+          ${editable ? `
+            <button type="button" onclick="openDusunModal()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1.5">
+              <i data-lucide="plus" class="w-4 h-4"></i> Tambah Dusun Baru
+            </button>
+          ` : ''}
+        </div>
 
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
               <thead>
                 <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[11px]">
-                  <th class="py-3 px-4">Urutan</th>
-                  <th class="py-3 px-4">ID Permanen</th>
+                  <th class="py-3 px-4">Urutan &amp; ID</th>
                   <th class="py-3 px-4">Nama Dusun</th>
-                  <th class="py-3 px-4 text-center">Jml Pelanggan</th>
+                  <th class="py-3 px-4 text-center">Jumlah Pelanggan</th>
                   <th class="py-3 px-4 text-right">Total Pembayaran</th>
                   <th class="py-3 px-4 text-right">Total Tunggakan</th>
                   <th class="py-3 px-4">Status</th>
@@ -4577,22 +4666,22 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
-                ${sortedDusun.map((d, idx) => {
-                  const plgs = AppState.db.pelanggan.filter(p => p.id_dusun === d.id_dusun);
-                  const plgIds = new Set(plgs.map(p => p.id_pelanggan));
-                  const totalBayar = AppState.db.pembayaran
-                    .filter(pb => pb.status === 'Sah' && plgIds.has(pb.id_pelanggan))
-                    .reduce((s, pb) => s + Number(pb.jumlah_bayar), 0);
-                  const totalTunggak = tunggakanList
-                    .filter(t => t.id_dusun === d.id_dusun)
-                    .reduce((s, t) => s + t.total_tunggakan, 0);
+                ${sortedDusun.map((d, i) => {
+                  const plgIds = new Set(db.pelanggan.filter(p => p.id_dusun === d.id_dusun).map(p => p.id_pelanggan));
+                  const totalBayar = db.pembayaran
+                    .filter(p => p.status === 'Sah' && plgIds.has(p.id_pelanggan))
+                    .reduce((s, p) => s + Number(p.jumlah_bayar), 0);
+                  const totalTunggak = db.tagihan
+                    .filter(t => t.status !== 'Lunas' && t.status !== 'Dibatalkan' && plgIds.has(t.id_pelanggan))
+                    .reduce((s, t) => s + Number(t.sisa_tagihan), 0);
 
                   return `
                     <tr class="hover:bg-slate-50">
-                      <td class="py-3 px-4 font-bold">${idx + 1}</td>
-                      <td class="py-3 px-4 font-mono text-[11px] text-slate-500">${d.id_dusun}</td>
+                      <td class="py-3 px-4 font-mono">
+                        <span class="font-bold">#${i + 1}</span> <span class="text-[10px] text-slate-400">(${d.id_dusun})</span>
+                      </td>
                       <td class="py-3 px-4 font-extrabold text-slate-800">${Utils.escapeHtml(d.nama_dusun)}</td>
-                      <td class="py-3 px-4 text-center font-bold">${plgs.length}</td>
+                      <td class="py-3 px-4 text-center font-bold">${plgIds.size}</td>
                       <td class="py-3 px-4 text-right font-bold text-emerald-600">${Utils.formatRupiah(totalBayar)}</td>
                       <td class="py-3 px-4 text-right font-bold text-rose-600">${Utils.formatRupiah(totalTunggak)}</td>
                       <td class="py-3 px-4">
@@ -4602,11 +4691,11 @@
                       </td>
                       ${editable ? `
                         <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
-                          <button type="button" onclick="moveDusunOrder('${d.id_dusun}', 'up')" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200" title="Naik">↑</button>
-                          <button type="button" onclick="moveDusunOrder('${d.id_dusun}', 'down')" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200" title="Turun">↓</button>
-                          <button type="button" onclick="openDusunModal('${d.id_dusun}')" class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">Ubah Nama</button>
-                          <button type="button" onclick="toggleDusunStatus('${d.id_dusun}', ${!d.aktif})" class="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold">${d.aktif ? 'Nonaktifkan' : 'Aktifkan'}</button>
-                          <button type="button" onclick="deleteDusunAction('${d.id_dusun}')" class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold">Hapus</button>
+                          <button type="button" onclick="reorderDusunAction('${d.id_dusun}', 'up')" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 font-bold" title="Naik">↑</button>
+                          <button type="button" onclick="reorderDusunAction('${d.id_dusun}', 'down')" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 font-bold" title="Turun">↓</button>
+                          <button type="button" onclick="openDusunModal('${d.id_dusun}')" class="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">Ubah Nama</button>
+                          <button type="button" onclick="toggleDusunAktif('${d.id_dusun}')" class="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold">${d.aktif ? 'Nonaktifkan' : 'Aktifkan'}</button>
+                          <button type="button" onclick="deleteDusunAction('${d.id_dusun}')" class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold">Hapus</button>
                         </td>
                       ` : ''}
                     </tr>`;
@@ -4621,13 +4710,11 @@
     function openDusunModal(id_dusun = null) {
       if (!requireUnlockedAction('dusun')) return;
       const d = id_dusun ? AppState.db.dusun.find(x => x.id_dusun === id_dusun) : null;
-
       openAppModal(d ? 'Ubah Nama Dusun' : 'Tambah Dusun Baru', `
         <form id="form-dusun" class="space-y-4 text-xs">
           <div>
             <label class="block font-bold text-slate-600 mb-1">Nama Dusun *</label>
-            <input type="text" id="dsn-nama" required value="${Utils.escapeHtml(d?.nama_dusun || '')}" placeholder="Contoh: Dusun Gedad"
-              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-bold" />
+            <input type="text" id="dsn-nama" required value="${Utils.escapeHtml(d?.nama_dusun || '')}" placeholder="Contoh: Dusun Krajan" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-bold" />
           </div>
           <div class="flex justify-end gap-2">
             <button type="button" onclick="closeAppModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 font-semibold">Batal</button>
@@ -4646,18 +4733,20 @@
         });
         closeAppModal();
         renderCurrentPage();
-        Utils.toast('success', 'Data Dusun Diperbarui');
+        Utils.toast('success', 'Data Dusun Disimpan');
       });
     }
 
-    async function toggleDusunStatus(id_dusun, aktif) {
+    async function toggleDusunAktif(id_dusun) {
       if (!requireUnlockedAction('dusun')) return;
-      await ApiClient.request('saveDusun', { item: { id_dusun, aktif } });
+      const d = AppState.db.dusun.find(x => x.id_dusun === id_dusun);
+      if (!d) return;
+      await ApiClient.request('saveDusun', { item: { id_dusun, aktif: !d.aktif } });
       renderCurrentPage();
-      Utils.toast('success', aktif ? 'Dusun Diaktifkan' : 'Dusun Dinonaktifkan');
+      Utils.toast('success', 'Status Dusun Diperbarui');
     }
 
-    async function moveDusunOrder(id_dusun, direction) {
+    async function reorderDusunAction(id_dusun, direction) {
       if (!requireUnlockedAction('dusun')) return;
       await ApiClient.request('reorderDusun', { id_dusun, direction });
       renderCurrentPage();
@@ -4676,168 +4765,129 @@
 
     /**
      * =========================================================================
-     * MODULE 16: MANAJEMEN PENGGUNA & AUDIT LOG
+     * MODULE 16: MANAJEMEN PENGGUNA & AUDIT LOG AKTIVITAS
      * =========================================================================
      */
     function renderPengguna(container) {
       const editable = canManage('pengguna');
+      const users = AppState.db.users;
+      const logs = AppState.db.auditLog.slice(0, 30);
 
       container.innerHTML = `
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 class="font-extrabold text-slate-800 text-base">Daftar Pengguna Sistem</h3>
-              <p class="text-xs text-slate-500">Pengaturan akun Administrator, Petugas Lapangan, dan Bendahara PAM Desa Kalikurmo.</p>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-xs">
+            <div class="flex items-center justify-between">
+              <h3 class="font-extrabold text-slate-800 text-base">Daftar Akun Pengurus PAM</h3>
+              ${editable ? `
+                <button type="button" onclick="openUserModal()" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                  + Tambah Pengguna
+                </button>
+              ` : ''}
             </div>
-            ${editable ? `
-              <button type="button" onclick="openUserFormModal()" class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5">
-                <i data-lucide="user-plus" class="w-4 h-4"></i> Tambah Pengguna Baru
-              </button>
-            ` : ''}
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead>
-                <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[11px]">
-                  <th class="py-3 px-4">Nama Lengkap</th>
-                  <th class="py-3 px-4">Username</th>
-                  <th class="py-3 px-4">Role / Jabatan</th>
-                  <th class="py-3 px-4">Status</th>
-                  ${editable ? '<th class="py-3 px-4 text-right">Aksi</th>' : ''}
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100">
-                ${AppState.db.users.map(u => `
-                  <tr>
-                    <td class="py-3 px-4 font-bold text-slate-800">${Utils.escapeHtml(u.nama_lengkap)}</td>
-                    <td class="py-3 px-4 font-mono text-blue-700">${Utils.escapeHtml(u.username)}</td>
-                    <td class="py-3 px-4"><span class="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold">${u.role}</span></td>
-                    <td class="py-3 px-4"><span class="px-2.5 py-0.5 rounded-full font-bold ${u.aktif ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">${u.aktif ? 'Aktif' : 'Nonaktif'}</span></td>
-                    ${editable ? `
-                      <td class="py-3 px-4 text-right space-x-1">
-                        <button type="button" onclick="openUserFormModal('${u.id_user}')" class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">Edit &amp; Izin</button>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[11px]">
+                    <th class="py-2.5 px-3">Nama &amp; Username</th>
+                    <th class="py-2.5 px-3">Role</th>
+                    <th class="py-2.5 px-3">Status</th>
+                    ${editable ? '<th class="py-2.5 px-3 text-right">Aksi</th>' : ''}
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${users.map(u => `
+                    <tr>
+                      <td class="py-2.5 px-3">
+                        <p class="font-bold text-slate-800">${Utils.escapeHtml(u.nama_lengkap)}</p>
+                        <p class="font-mono text-[11px] text-slate-500">@${Utils.escapeHtml(u.username)}</p>
                       </td>
-                    ` : ''}
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+                      <td class="py-2.5 px-3 font-semibold text-blue-700">${Utils.escapeHtml(u.role)}</td>
+                      <td class="py-2.5 px-3">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${u.aktif ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}">
+                          ${u.aktif ? 'Aktif' : 'Nonaktif'}
+                        </span>
+                      </td>
+                      ${editable ? `
+                        <td class="py-2.5 px-3 text-right">
+                          <button type="button" onclick="openUserModal('${u.id_user}')" class="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">Edit</button>
+                        </td>
+                      ` : ''}
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
 
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-          <h3 class="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-            <i data-lucide="history" class="w-4 h-4 text-indigo-600"></i>
-            <span>Log Aktivitas &amp; Keamanan (AuditLog)</span>
-          </h3>
-          <div class="max-h-80 overflow-y-auto border border-slate-200 rounded-xl">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 sticky top-0 border-b border-slate-200 text-[11px] text-slate-600">
-                <tr>
-                  <th class="p-2.5">Waktu</th>
-                  <th class="p-2.5">Pengguna</th>
-                  <th class="p-2.5">Aksi</th>
-                  <th class="p-2.5">Keterangan</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100">
-                ${AppState.db.auditLog.map(log => `
-                  <tr>
-                    <td class="p-2.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">${Utils.formatDateTime(log.waktu)}</td>
-                    <td class="p-2.5 font-semibold text-slate-700">${Utils.escapeHtml(log.user)}</td>
-                    <td class="p-2.5"><span class="px-2 py-0.5 rounded bg-slate-100 font-mono text-[10px] font-bold">${Utils.escapeHtml(log.aksi)}</span></td>
-                    <td class="p-2.5 text-slate-600">${Utils.escapeHtml(log.detail)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+          <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3 text-xs">
+            <h3 class="font-extrabold text-slate-800 text-base">Catatan Aktivitas (AuditLog)</h3>
+            <div class="max-h-96 overflow-y-auto divide-y divide-slate-100">
+              ${logs.length ? logs.map(l => `
+                <div class="py-2.5">
+                  <div class="flex justify-between text-[10px] text-slate-400">
+                    <span class="font-bold text-blue-700">${Utils.escapeHtml(l.aksi)}</span>
+                    <span>${Utils.formatDateTime(l.waktu)}</span>
+                  </div>
+                  <p class="text-slate-700 mt-0.5">${Utils.escapeHtml(l.detail)}</p>
+                </div>
+              `).join('') : '<p class="text-slate-400 py-4 text-center">Belum ada catatan aktivitas.</p>'}
+            </div>
           </div>
         </div>
       `;
     }
 
-    function openUserFormModal(id_user = null) {
+    function openUserModal(id_user = null) {
       if (!requireUnlockedAction('pengguna')) return;
       const u = id_user ? AppState.db.users.find(x => x.id_user === id_user) : null;
-      const perms = u?.izin_akses || DEFAULT_ROLE_PERMISSIONS.Petugas;
-      const permKeys = [
-        ['pelanggan', 'Kelola Pelanggan'],
-        ['meter', 'Catat Meter Air'],
-        ['tagihan', 'Buat Tagihan'],
-        ['pembayaran', 'Catat Pembayaran'],
-        ['keuangan', 'Kelola Pembukuan Kas'],
-        ['laporan', 'Cetak Laporan'],
-        ['dusun', 'Kelola Dusun']
-      ];
-
-      openAppModal(u ? 'Edit Pengguna & Hak Akses' : 'Tambah Pengguna Baru', `
+      openAppModal(u ? 'Edit Akun Pengguna' : 'Tambah Pengguna Baru', `
         <form id="form-user" class="space-y-4 text-xs">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block font-bold text-slate-600 mb-1">Nama Lengkap *</label>
-              <input type="text" id="usr-nama" required value="${Utils.escapeHtml(u?.nama_lengkap || '')}" class="w-full px-3 py-2.5 rounded-xl border border-slate-300" />
-            </div>
+          <div>
+            <label class="block font-bold text-slate-600 mb-1">Nama Lengkap *</label>
+            <input type="text" id="usr-nama" required value="${Utils.escapeHtml(u?.nama_lengkap || '')}" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-bold" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block font-bold text-slate-600 mb-1">Username *</label>
-              <input type="text" id="usr-username" required value="${Utils.escapeHtml(u?.username || '')}" ${u ? 'readonly class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-100"' : 'class="w-full px-3 py-2.5 rounded-xl border border-slate-300"'} />
+              <input type="text" id="usr-uname" required ${u ? 'readonly' : ''} value="${Utils.escapeHtml(u?.username || '')}" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono" />
             </div>
             <div>
               <label class="block font-bold text-slate-600 mb-1">Role / Tingkatan</label>
-              <select id="usr-role" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white">
+              <select id="usr-role" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold">
                 <option value="Administrator" ${u?.role === 'Administrator' ? 'selected' : ''}>Administrator</option>
                 <option value="Petugas" ${u?.role === 'Petugas' ? 'selected' : ''}>Petugas</option>
                 <option value="Bendahara" ${u?.role === 'Bendahara' ? 'selected' : ''}>Bendahara</option>
               </select>
             </div>
-            <div>
-              <label class="block font-bold text-slate-600 mb-1">${u ? 'Reset Password (Kosongkan jika tetap)' : 'Password Awal *'}</label>
-              <input type="password" id="usr-pass" ${u ? '' : 'required'} placeholder="Minimal 6 karakter" class="w-full px-3 py-2.5 rounded-xl border border-slate-300" />
-            </div>
           </div>
-
           <div>
-            <label class="block font-bold text-slate-600 mb-1.5">Izin Akses Fitur:</label>
-            <div class="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              ${permKeys.map(([k, lbl]) => `
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" class="usr-perm-chk rounded text-blue-600" value="${k}" ${perms[k] ? 'checked' : ''} />
-                  <span>${lbl}</span>
-                </label>
-              `).join('')}
-            </div>
+            <label class="block font-bold text-slate-600 mb-1">${u ? 'Password Baru (Kosongkan jika tidak diubah)' : 'Password *'}</label>
+            <input type="password" id="usr-pass" ${u ? '' : 'required'} class="w-full px-3 py-2.5 rounded-xl border border-slate-300" />
           </div>
-
-          ${u ? `
-            <label class="flex items-center gap-2 font-bold text-slate-700">
-              <input type="checkbox" id="usr-aktif" ${u.aktif ? 'checked' : ''} class="rounded text-blue-600" />
-              <span>Akun Aktif</span>
-            </label>
-          ` : ''}
-
-          <div class="flex justify-end gap-2 pt-2">
+          <label class="flex items-center gap-2 font-bold text-slate-700">
+            <input type="checkbox" id="usr-aktif" ${(!u || u.aktif) ? 'checked' : ''} class="rounded text-blue-600" />
+            <span>Akun Aktif</span>
+          </label>
+          <div class="flex justify-end gap-2">
             <button type="button" onclick="closeAppModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 font-semibold">Batal</button>
-            <button type="submit" class="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-bold">Simpan Pengguna</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold">Simpan Pengguna</button>
           </div>
         </form>
-      `);
+      `, 'max-w-md');
 
       document.getElementById('form-user').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const izin_akses = {};
-        document.querySelectorAll('.usr-perm-chk').forEach(chk => {
-          izin_akses[chk.value] = chk.checked;
-        });
+        const role = document.getElementById('usr-role').value;
         const res = await ApiClient.request('saveUser', {
+          newPassword: document.getElementById('usr-pass').value,
           item: {
             id_user: u?.id_user || null,
+            username: document.getElementById('usr-uname').value.trim(),
             nama_lengkap: document.getElementById('usr-nama').value.trim(),
-            username: document.getElementById('usr-username').value.trim(),
-            role: document.getElementById('usr-role').value,
-            aktif: u ? document.getElementById('usr-aktif').checked : true,
-            izin_akses
-          },
-          newPassword: document.getElementById('usr-pass').value
+            role,
+            aktif: document.getElementById('usr-aktif').checked,
+            izin_akses: { ...DEFAULT_ROLE_PERMISSIONS[role] }
+          }
         });
         if (!res.success) {
           Swal.fire('Gagal', res.message, 'error');
@@ -4851,7 +4901,7 @@
 
     /**
      * =========================================================================
-     * MODULE 17: KEAMANAN APLIKASI (PIN LOCK & AUTO-LOCK SETTINGS)
+     * MODULE 17: KEAMANAN APLIKASI (PENGATURAN PIN 6 DIGIT & AUTO-LOCK)
      * =========================================================================
      */
     function renderKeamanan(container) {
@@ -4859,98 +4909,65 @@
       const cfg = AppState.db.pengaturan;
 
       container.innerHTML = `
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
           <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-                <i data-lucide="key-round" class="w-5 h-5"></i>
-              </div>
-              <div>
-                <h3 class="font-extrabold text-slate-800 text-base">Ubah PIN Keamanan 6 Digit</h3>
-                <p class="text-xs text-slate-500">PIN disimpan terenkripsi (SHA-256 + Salt) di database cloud.</p>
-              </div>
-            </div>
-
-            ${!cfg.pin_default_changed ? `
-              <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium">
-                <strong>Perhatian:</strong> PIN bawaan <code>112233</code> masih aktif. Segera ganti dengan PIN rahasia 6 digit baru!
+            <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2">
+              <i data-lucide="key-round" class="w-5 h-5 text-blue-600"></i> Ubah PIN Keamanan (6 Digit)
+            </h3>
+            ${!isUnlocked ? `
+              <div class="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 font-semibold">
+                Buka kunci aplikasi terlebih dahulu untuk mengganti PIN keamanan.
               </div>
             ` : `
-              <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
-                PIN bawaan sudah diganti dengan PIN kustom pengurus.
-              </div>
-            `}
-
-            ${isUnlocked ? `
-              <form id="form-ganti-pin" class="space-y-3 text-xs">
+              <form id="form-ganti-pin" class="space-y-3">
                 <div>
                   <label class="block font-bold text-slate-600 mb-1">PIN Lama (6 Digit) *</label>
-                  <input type="password" id="pin-old" maxlength="6" pattern="\\d{6}" required placeholder="••••••"
-                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-mono text-base tracking-widest" />
+                  <input type="password" id="pin-old" maxlength="6" pattern="\\d{6}" required placeholder="••••••" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono text-base tracking-widest" />
                 </div>
                 <div>
                   <label class="block font-bold text-slate-600 mb-1">PIN Baru (6 Digit Angka) *</label>
-                  <input type="password" id="pin-new" maxlength="6" pattern="\\d{6}" required placeholder="••••••"
-                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-mono text-base tracking-widest" />
+                  <input type="password" id="pin-new" maxlength="6" pattern="\\d{6}" required placeholder="••••••" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono text-base tracking-widest" />
                 </div>
                 <div>
                   <label class="block font-bold text-slate-600 mb-1">Konfirmasi PIN Baru *</label>
-                  <input type="password" id="pin-confirm" maxlength="6" pattern="\\d{6}" required placeholder="••••••"
-                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-mono text-base tracking-widest" />
+                  <input type="password" id="pin-confirm" maxlength="6" pattern="\\d{6}" required placeholder="••••••" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono text-base tracking-widest" />
                 </div>
                 <button type="submit" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold">
                   Simpan PIN Baru
                 </button>
               </form>
-            ` : `
-              <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-2">
-                <p>Buka kunci aplikasi terlebih dahulu untuk mengganti PIN keamanan.</p>
-                <button type="button" onclick="openPinUnlockModal()" class="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold">Masukkan PIN Sekarang</button>
-              </div>
             `}
           </div>
 
           <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
-                <i data-lucide="timer" class="w-5 h-5"></i>
-              </div>
-              <div>
-                <h3 class="font-extrabold text-slate-800 text-base">Penguncian Otomatis &amp; Manual</h3>
-                <p class="text-xs text-slate-500">Kunci aplikasi otomatis ketika tidak ada aktivitas pengguna.</p>
-              </div>
-            </div>
-
-            <form id="form-autolock" class="space-y-4 text-xs">
-              <label class="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-                <span class="font-bold text-slate-700">Aktifkan Penguncian Otomatis</span>
-                <input type="checkbox" id="al-enabled" ${cfg.auto_lock_enabled ? 'checked' : ''} ${!isUnlocked ? 'disabled' : ''} class="w-4 h-4 rounded text-blue-600" />
+            <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2">
+              <i data-lucide="shield-check" class="w-5 h-5 text-emerald-600"></i> Penguncian Otomatis &amp; Manual
+            </h3>
+            <form id="form-autolock" class="space-y-4">
+              <label class="flex items-center gap-2.5 font-bold text-slate-700">
+                <input type="checkbox" id="al-enabled" ${cfg.auto_lock_enabled ? 'checked' : ''} ${!isUnlocked ? 'disabled' : ''} class="rounded text-blue-600" />
+                <span>Aktifkan Penguncian Otomatis Saat Tidak Aktif</span>
               </label>
-
               <div>
-                <label class="block font-bold text-slate-600 mb-1">Waktu Tunggu Penguncian Otomatis</label>
-                <select id="al-minutes" ${!isUnlocked ? 'disabled' : ''} class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white font-bold">
+                <label class="block font-bold text-slate-600 mb-1">Waktu Penguncian Otomatis</label>
+                <select id="al-minutes" ${!isUnlocked ? 'disabled' : ''} class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold">
                   <option value="1" ${Number(cfg.auto_lock_minutes) === 1 ? 'selected' : ''}>1 Menit</option>
                   <option value="5" ${Number(cfg.auto_lock_minutes) === 5 ? 'selected' : ''}>5 Menit</option>
                   <option value="10" ${Number(cfg.auto_lock_minutes) === 10 ? 'selected' : ''}>10 Menit</option>
                   <option value="15" ${Number(cfg.auto_lock_minutes) === 15 ? 'selected' : ''}>15 Menit</option>
                 </select>
               </div>
-
               ${isUnlocked ? `
-                <button type="submit" class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold">
-                  Simpan Pengaturan Kunci Otomatis
-                </button>
+                <div class="flex flex-wrap gap-2 pt-2">
+                  <button type="submit" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+                    Simpan Pengaturan Kunci
+                  </button>
+                  <button type="button" onclick="lockApplicationNow()" class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold">
+                    Kunci Aplikasi Sekarang
+                  </button>
+                </div>
               ` : ''}
             </form>
-
-            <div class="pt-4 border-t border-slate-100">
-              <button type="button" onclick="lockApplicationNow('Penguncian manual dari menu Keamanan Aplikasi.')"
-                class="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm">
-                <i data-lucide="lock" class="w-4 h-4"></i>
-                <span>Kunci Aplikasi Sekarang</span>
-              </button>
-            </div>
           </div>
         </div>
       `;
@@ -4959,14 +4976,10 @@
       if (formPin) {
         formPin.addEventListener('submit', async (e) => {
           e.preventDefault();
-          const oldPin = document.getElementById('pin-old').value.trim();
-          const newPin = document.getElementById('pin-new').value.trim();
-          const confirmPin = document.getElementById('pin-confirm').value.trim();
-          if (!/^\d{6}$/.test(newPin)) {
-            Swal.fire('Format Salah', 'PIN baru harus terdiri dari 6 digit angka.', 'warning');
-            return;
-          }
-          if (newPin !== confirmPin) {
+          const oldPin = document.getElementById('pin-old').value;
+          const newPin = document.getElementById('pin-new').value;
+          const confPin = document.getElementById('pin-confirm').value;
+          if (newPin !== confPin) {
             Swal.fire('Tidak Cocok', 'Konfirmasi PIN baru tidak sama.', 'warning');
             return;
           }
@@ -4975,15 +4988,14 @@
             Swal.fire('Gagal', res.message, 'error');
             return;
           }
-          updateLockStateUI();
-          renderCurrentPage();
-          Swal.fire('Berhasil', 'PIN keamanan aplikasi berhasil diperbarui.', 'success');
+          formPin.reset();
+          Swal.fire('Berhasil', 'PIN keamanan baru telah disimpan ke database cloud.', 'success');
         });
       }
 
-      const formAl = document.getElementById('form-autolock');
-      if (formAl && isUnlocked) {
-        formAl.addEventListener('submit', async (e) => {
+      const formAuto = document.getElementById('form-autolock');
+      if (formAuto && isUnlocked) {
+        formAuto.addEventListener('submit', async (e) => {
           e.preventDefault();
           await ApiClient.request('savePengaturan', {
             settings: {
